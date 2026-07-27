@@ -24,6 +24,11 @@ export const Route = createFileRoute("/auth")({
 type Method = "email" | "phone";
 type Step = "identify" | "otp" | "profile" | "done";
 
+function validateFullName(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return parts.length >= 2 && parts.every((p) => p.length >= 2 && /^[\p{L}'’-]+$/u.test(p));
+}
+
 function AuthPage() {
   const [method, setMethod] = useState<Method>("email");
   const [step, setStep] = useState<Step>("identify");
@@ -34,6 +39,9 @@ function AuthPage() {
   const [offerDetails, setOfferDetails] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showClarify, setShowClarify] = useState(false);
+  const [tempName, setTempName] = useState("");
+  const [tempError, setTempError] = useState<string | null>(null);
 
   function next() {
     setError(null);
@@ -47,13 +55,25 @@ function AuthPage() {
         if (otp.length < 6) return setError("Kodi duhet të ketë 6 shifra.");
         setStep("profile");
       } else if (step === "profile") {
-        if (fullName.trim().split(/\s+/).length < 2)
-          return setError(
-            "Ju lutem shkruani emrin dhe mbiemrin e plotë (pa iniciale ose numra).",
-          );
+        if (!validateFullName(fullName)) {
+          setTempName(fullName);
+          setTempError(null);
+          setShowClarify(true);
+          return;
+        }
         setStep("done");
       }
     }, 500);
+  }
+
+  function saveClarified() {
+    if (!validateFullName(tempName)) {
+      setTempError("Ju lutemi vendosni Emrin dhe Mbiemrin e plotë (pa iniciale, numra ose simbole).");
+      return;
+    }
+    setFullName(tempName.trim().replace(/\s+/g, " "));
+    setShowClarify(false);
+    setStep("done");
   }
 
   return (

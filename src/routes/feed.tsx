@@ -1,16 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ShieldCheck,
   Send,
   Paperclip,
-  MessageCircle,
   Briefcase,
   Wrench,
   Store,
   MoreHorizontal,
   ArrowLeft,
+  LayoutGrid,
+  Newspaper,
+  Clock,
 } from "lucide-react";
+import { NotificationSettings } from "@/components/NotificationSettings";
+import { UserBadge } from "@/components/UserBadge";
+import { CommentSection, type CommentItem } from "@/components/CommentSection";
 
 export const Route = createFileRoute("/feed")({
   head: () => ({
@@ -21,10 +26,7 @@ export const Route = createFileRoute("/feed")({
         content: "Postime nga anëtarë të verifikuar — punë, shërbime, tregti.",
       },
       { property: "og:title", content: "Feed — Lidhjet" },
-      {
-        property: "og:description",
-        content: "Postime nga anëtarë të verifikuar.",
-      },
+      { property: "og:description", content: "Postime nga anëtarë të verifikuar." },
     ],
   }),
   component: FeedPage,
@@ -33,27 +35,25 @@ export const Route = createFileRoute("/feed")({
 type Category = "pune" | "sherbim" | "tregti" | "tjeter";
 interface Post {
   id: string;
-  author: string;
+  authorFullName: string;
   offerType: Category;
   body: string;
   createdAt: string;
-  comments: { author: string; body: string }[];
+  comments: CommentItem[];
 }
 
 const SEED: Post[] = [
   {
     id: "1",
-    author: "Arben Hoxha",
+    authorFullName: "Arben Hoxha",
     offerType: "sherbim",
     body: "Elektricist i licencuar në Tiranë. Instalime, riparime, kontrata mirëmbajtjeje. Kontakt në mesazh.",
     createdAt: "2 orë më parë",
-    comments: [
-      { author: "Elira K.", body: "A punoni edhe në zonën e Yzberishtit?" },
-    ],
+    comments: [{ author: "Elira Kola", body: "A punoni edhe në zonën e Yzberishtit?" }],
   },
   {
     id: "2",
-    author: "Ilir Deda",
+    authorFullName: "Ilir Deda",
     offerType: "tregti",
     body: "Shes olive extra virgin nga ferma familjare në Vlorë. 5L / 15L. Certifikatë analize në PDF.",
     createdAt: "5 orë më parë",
@@ -61,7 +61,7 @@ const SEED: Post[] = [
   },
   {
     id: "3",
-    author: "Ariana Meta",
+    authorFullName: "Ariana Meta",
     offerType: "pune",
     body: "Kërkoj punë part-time si përkthyese IT/EN (5+ vite eksperiencë). CV i verifikuar.",
     createdAt: "1 ditë më parë",
@@ -71,11 +71,7 @@ const SEED: Post[] = [
 
 const CAT_META: Record<Category, { icon: typeof Briefcase; label: string; className: string }> = {
   pune: { icon: Briefcase, label: "Punë", className: "bg-primary/15 text-primary" },
-  sherbim: {
-    icon: Wrench,
-    label: "Shërbim",
-    className: "bg-accent/15 text-accent",
-  },
+  sherbim: { icon: Wrench, label: "Shërbim", className: "bg-accent/15 text-accent" },
   tregti: {
     icon: Store,
     label: "Tregti",
@@ -88,13 +84,19 @@ function FeedPage() {
   const [posts, setPosts] = useState<Post[]>(SEED);
   const [draft, setDraft] = useState("");
   const [cat, setCat] = useState<Category>("sherbim");
+  const [filter, setFilter] = useState<Category | "all">("all");
+
+  const visible = useMemo(
+    () => (filter === "all" ? posts : posts.filter((p) => p.offerType === filter)),
+    [posts, filter],
+  );
 
   function submit() {
     if (!draft.trim()) return;
     setPosts([
       {
         id: crypto.randomUUID(),
-        author: "Ju (demo)",
+        authorFullName: "Ju Demo",
         offerType: cat,
         body: draft,
         createdAt: "tani",
@@ -107,8 +109,8 @@ function FeedPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-border/60 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link to="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" /> Kryefaqja
           </Link>
@@ -118,109 +120,179 @@ function FeedPage() {
             </span>
             Lidhjet
           </Link>
-          <Link to="/admin" className="text-xs text-muted-foreground hover:text-foreground">
-            Admin
-          </Link>
+          <div className="flex items-center gap-2">
+            <NotificationSettings />
+            <Link to="/admin" className="text-xs text-muted-foreground hover:text-foreground">
+              Admin
+            </Link>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-6 py-8">
-        {/* Composer */}
-        <div className="card-elevated p-4">
-          <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            Një postim / 24 orë — do skanohet nga AI për maluer dhe rreziqe.
-          </div>
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={3}
-            placeholder="Cfarë ofron sot?"
-            className="w-full resize-none rounded-md border border-border bg-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
-          />
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              {(Object.keys(CAT_META) as Category[]).map((c) => {
-                const M = CAT_META[c];
-                const active = cat === c;
-                return (
+      <main className="mx-auto max-w-7xl px-6 py-8">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+          {/* Left: Categories */}
+          <aside className="md:col-span-1">
+            <div className="card-elevated sticky top-24 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <LayoutGrid className="h-4 w-4 text-primary" /> Kategoritë
+              </div>
+              <ul className="space-y-1">
+                <li>
                   <button
-                    key={c}
-                    onClick={() => setCat(c)}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors ${
-                      active ? M.className : "text-muted-foreground hover:text-foreground"
+                    onClick={() => setFilter("all")}
+                    className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${
+                      filter === "all" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-input hover:text-foreground"
                     }`}
                   >
-                    <M.icon className="h-3.5 w-3.5" />
-                    {M.label}
+                    <span>Të gjitha</span>
+                    <span className="text-xs opacity-70">{posts.length}</span>
                   </button>
+                </li>
+                {(Object.keys(CAT_META) as Category[]).map((c) => {
+                  const M = CAT_META[c];
+                  const count = posts.filter((p) => p.offerType === c).length;
+                  const active = filter === c;
+                  return (
+                    <li key={c}>
+                      <button
+                        onClick={() => setFilter(c)}
+                        className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${
+                          active ? M.className : "text-muted-foreground hover:bg-input hover:text-foreground"
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <M.icon className="h-4 w-4" /> {M.label}
+                        </span>
+                        <span className="text-xs opacity-70">{count}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-4 rounded-md bg-input/50 p-3 text-xs text-muted-foreground">
+                AI kategorizon automatikisht postimet — mund t'i filtrosh këtu.
+              </p>
+            </div>
+          </aside>
+
+          {/* Center: Feed */}
+          <section className="md:col-span-2">
+            <div className="card-elevated p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                Një postim / 24 orë — skanohet nga AI për malware dhe rreziqe.
+              </div>
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={3}
+                placeholder="Cfarë ofron sot?"
+                className="w-full resize-none rounded-md border border-border bg-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(Object.keys(CAT_META) as Category[]).map((c) => {
+                    const M = CAT_META[c];
+                    const active = cat === c;
+                    return (
+                      <button
+                        key={c}
+                        onClick={() => setCat(c)}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors ${
+                          active ? M.className : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <M.icon className="h-3.5 w-3.5" />
+                        {M.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="grid h-9 w-9 place-items-center rounded-md border border-border text-muted-foreground hover:text-foreground"
+                    title="Bashkangjit (foto, PDF, DOC, ZIP, link)"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={submit}
+                    className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Send className="h-4 w-4" /> Posto
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center gap-2 text-sm font-semibold">
+              <Newspaper className="h-4 w-4 text-primary" /> Më të fundit
+              {filter !== "all" && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  · {CAT_META[filter].label}
+                </span>
+              )}
+            </div>
+
+            <div className="mt-3 space-y-4">
+              {visible.map((p) => {
+                const M = CAT_META[p.offerType];
+                return (
+                  <article key={p.id} className="card-elevated p-5">
+                    <div className="flex items-center gap-3">
+                      <UserBadge fullName={p.authorFullName} />
+                      <div className="flex-1 text-xs text-muted-foreground">{p.createdAt}</div>
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${M.className}`}
+                      >
+                        <M.icon className="h-3.5 w-3.5" /> {M.label}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-relaxed">{p.body}</p>
+                    <div className="mt-4 flex items-center gap-4 border-t border-border/60 pt-3 text-xs text-[color:var(--color-success)]">
+                      <span className="inline-flex items-center gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5" /> Autori i verifikuar
+                      </span>
+                    </div>
+                    <CommentSection initial={p.comments} />
+                  </article>
                 );
               })}
+              {visible.length === 0 && (
+                <div className="card-elevated p-8 text-center text-sm text-muted-foreground">
+                  Asnjë postim në këtë kategori.
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                className="grid h-9 w-9 place-items-center rounded-md border border-border text-muted-foreground hover:text-foreground"
-                title="Bashkangjit (foto, PDF, DOC, ZIP, link)"
-              >
-                <Paperclip className="h-4 w-4" />
-              </button>
-              <button
-                onClick={submit}
-                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                <Send className="h-4 w-4" /> Posto
-              </button>
-            </div>
-          </div>
-        </div>
+          </section>
 
-        {/* Feed */}
-        <div className="mt-6 space-y-4">
-          {posts.map((p) => {
-            const M = CAT_META[p.offerType];
-            return (
-              <article key={p.id} className="card-elevated p-5">
-                <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/20 text-sm font-semibold text-primary">
-                    {p.author
-                      .split(" ")
-                      .map((s) => s[0])
-                      .slice(0, 2)
-                      .join("")}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold">{p.author}</div>
-                    <div className="text-xs text-muted-foreground">{p.createdAt}</div>
-                  </div>
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${M.className}`}
-                  >
-                    <M.icon className="h-3.5 w-3.5" /> {M.label}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm leading-relaxed">{p.body}</p>
-                <div className="mt-4 flex items-center gap-4 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1.5">
-                    <MessageCircle className="h-3.5 w-3.5" />
-                    {p.comments.length} komente
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 text-[color:var(--color-success)]">
-                    <ShieldCheck className="h-3.5 w-3.5" /> I verifikuar
-                  </span>
-                </div>
-                {p.comments.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {p.comments.map((c, i) => (
-                      <div key={i} className="rounded-md bg-input/50 px-3 py-2 text-sm">
-                        <span className="font-medium">{c.author}</span>{" "}
-                        <span className="text-muted-foreground">{c.body}</span>
+          {/* Right: Latest titles */}
+          <aside className="md:col-span-1">
+            <div className="card-elevated sticky top-24 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <Clock className="h-4 w-4 text-primary" /> Titujt e fundit
+              </div>
+              <ul className="space-y-2">
+                {posts.slice(0, 6).map((p) => {
+                  const M = CAT_META[p.offerType];
+                  return (
+                    <li key={p.id} className="group cursor-pointer">
+                      <div className="flex items-start gap-2">
+                        <M.icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm group-hover:text-primary">{p.body}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {p.authorFullName} · {p.createdAt}
+                          </p>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </article>
-            );
-          })}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </aside>
         </div>
       </main>
     </div>
