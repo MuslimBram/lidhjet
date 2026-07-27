@@ -24,6 +24,11 @@ export const Route = createFileRoute("/auth")({
 type Method = "email" | "phone";
 type Step = "identify" | "otp" | "profile" | "done";
 
+function validateFullName(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return parts.length >= 2 && parts.every((p) => p.length >= 2 && /^[\p{L}'’-]+$/u.test(p));
+}
+
 function AuthPage() {
   const [method, setMethod] = useState<Method>("email");
   const [step, setStep] = useState<Step>("identify");
@@ -34,6 +39,9 @@ function AuthPage() {
   const [offerDetails, setOfferDetails] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showClarify, setShowClarify] = useState(false);
+  const [tempName, setTempName] = useState("");
+  const [tempError, setTempError] = useState<string | null>(null);
 
   function next() {
     setError(null);
@@ -47,13 +55,25 @@ function AuthPage() {
         if (otp.length < 6) return setError("Kodi duhet të ketë 6 shifra.");
         setStep("profile");
       } else if (step === "profile") {
-        if (fullName.trim().split(/\s+/).length < 2)
-          return setError(
-            "Ju lutem shkruani emrin dhe mbiemrin e plotë (pa iniciale ose numra).",
-          );
+        if (!validateFullName(fullName)) {
+          setTempName(fullName);
+          setTempError(null);
+          setShowClarify(true);
+          return;
+        }
         setStep("done");
       }
     }, 500);
+  }
+
+  function saveClarified() {
+    if (!validateFullName(tempName)) {
+      setTempError("Ju lutemi vendosni Emrin dhe Mbiemrin e plotë (pa iniciale, numra ose simbole).");
+      return;
+    }
+    setFullName(tempName.trim().replace(/\s+/g, " "));
+    setShowClarify(false);
+    setStep("done");
   }
 
   return (
@@ -240,6 +260,43 @@ function AuthPage() {
           aktivizohet me kredite.
         </p>
       </main>
+
+      {showClarify && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="card-elevated w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold text-destructive">Sqaro emrin!</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Emri duket i shkurtër ose i paplotë. Shkruani <strong>Emrin dhe Mbiemrin</strong> (të
+              paktën 2 fjalë, pa iniciale, numra ose simbole).
+            </p>
+            <input
+              value={tempName}
+              onChange={(e) => setTempName(e.target.value)}
+              placeholder="P.sh. Arben Hoxha"
+              className="mt-4 w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            {tempError && (
+              <p className="mt-2 rounded-md bg-destructive/15 px-3 py-2 text-xs text-destructive">
+                {tempError}
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setShowClarify(false)}
+                className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                Anulo
+              </button>
+              <button
+                onClick={saveClarified}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Ruaj dhe vazhdo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
