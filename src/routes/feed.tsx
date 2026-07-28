@@ -12,10 +12,19 @@ import {
   LayoutGrid,
   Newspaper,
   Clock,
+  AlertTriangle,
+  HandCoins,
+  Tag,
 } from "lucide-react";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { UserBadge } from "@/components/UserBadge";
 import { CommentSection, type CommentItem } from "@/components/CommentSection";
+import { SuspensionBanner } from "@/components/SuspensionBanner";
+import { InterestDialog } from "@/components/InterestDialog";
+import { detectContact } from "@/lib/contactDetect";
+import { checkPrice } from "@/lib/priceCheck";
+import { calcServiceTax, formatLek } from "@/lib/taxCalc";
+import { useViolations } from "@/hooks/useViolations";
 
 export const Route = createFileRoute("/feed")({
   head: () => ({
@@ -38,6 +47,7 @@ interface Post {
   authorFullName: string;
   offerType: Category;
   body: string;
+  price: number;
   createdAt: string;
   comments: CommentItem[];
 }
@@ -47,15 +57,17 @@ const SEED: Post[] = [
     id: "1",
     authorFullName: "Arben Hoxha",
     offerType: "sherbim",
-    body: "Elektricist i licencuar në Tiranë. Instalime, riparime, kontrata mirëmbajtjeje. Kontakt në mesazh.",
+    body: "Elektricist i licencuar. Instalime, riparime, kontrata mirëmbajtjeje.",
+    price: 3500,
     createdAt: "2 orë më parë",
-    comments: [{ author: "Elira Kola", body: "A punoni edhe në zonën e Yzberishtit?" }],
+    comments: [{ author: "Elira Kola", body: "A punoni edhe në zonën time?" }],
   },
   {
     id: "2",
     authorFullName: "Ilir Deda",
     offerType: "tregti",
-    body: "Shes olive extra virgin nga ferma familjare në Vlorë. 5L / 15L. Certifikatë analize në PDF.",
+    body: "Shes olive extra virgin nga ferma familjare. 5L / 15L, certifikatë analize.",
+    price: 12000,
     createdAt: "5 orë më parë",
     comments: [],
   },
@@ -64,6 +76,7 @@ const SEED: Post[] = [
     authorFullName: "Ariana Meta",
     offerType: "pune",
     body: "Kërkoj punë part-time si përkthyese IT/EN (5+ vite eksperiencë). CV i verifikuar.",
+    price: 45000,
     createdAt: "1 ditë më parë",
     comments: [],
   },
@@ -83,8 +96,12 @@ const CAT_META: Record<Category, { icon: typeof Briefcase; label: string; classN
 function FeedPage() {
   const [posts, setPosts] = useState<Post[]>(SEED);
   const [draft, setDraft] = useState("");
+  const [priceStr, setPriceStr] = useState("");
   const [cat, setCat] = useState<Category>("sherbim");
   const [filter, setFilter] = useState<Category | "all">("all");
+  const [error, setError] = useState<string | null>(null);
+  const [interestFor, setInterestFor] = useState<Post | null>(null);
+  const { count, max, isSuspended, suspendedUntil, addViolation, reset } = useViolations();
 
   const visible = useMemo(
     () => (filter === "all" ? posts : posts.filter((p) => p.offerType === filter)),
@@ -92,19 +109,52 @@ function FeedPage() {
   );
 
   function submit() {
+    setError(null);
+    if (isSuspended) {
+      setError("Llogaria juaj është pezulluar. Nuk mund të postoni deri në përfundim.");
+      return;
+    }
     if (!draft.trim()) return;
+
+    // 1) Contact detection (mock AI)
+    const hits = detectContact(draft);
+    if (hits.length > 0) {
+      const list = hits.map((h) => h.label).join(", ");
+      const reason = `Postimi përmban informacion kontakti (${list}). Kontakti lejohet vetëm pas pagesës së taksës dhe interesit të blerësit.`;
+      const { count: c, suspendedUntil: su } = addViolation("contact", reason);
+      setError(
+        `${reason}\nShkelje: ${c}/${max}${su ? " — llogaria u pezullua për 7 ditë." : ""}`,
+      );
+      return;
+    }
+
+    // 2) Price validation (mock AI)
+    const price = Number(priceStr.replace(/\D/g, ""));
+    const pc = checkPrice(price, cat);
+    if (!pc.ok) {
+      const { count: c, suspendedUntil: su } = addViolation("price", pc.reason!);
+      setError(
+        `Çmimi i deklaruar nuk është brenda normave të tregut. ${pc.reason}\nShkelje: ${c}/${max}${
+          su ? " — llogaria u pezullua për 7 ditë." : ""
+        }`,
+      );
+      return;
+    }
+
     setPosts([
       {
         id: crypto.randomUUID(),
         authorFullName: "Ju Demo",
         offerType: cat,
         body: draft,
+        price,
         createdAt: "tani",
         comments: [],
       },
       ...posts,
     ]);
     setDraft("");
+    setPriceStr("");
   }
 
   return (
@@ -130,6 +180,8 @@ function FeedPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8">
+        {isSuspended && suspendedUntil && <SuspensionBanner until={suspendedUntil} onReset={reset} />}
+
         <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
           {/* Left: Categories */}
           <aside className="md:col-span-1">
@@ -170,9 +222,12 @@ function FeedPage() {
                   );
                 })}
               </ul>
-              <p className="mt-4 rounded-md bg-input/50 p-3 text-xs text-muted-foreground">
-                AI kategorizon automatikisht postimet — mund t'i filtrosh këtu.
-              </p>
+              <div className="mt-4 rounded-md bg-input/50 p-3 text-xs text-muted-foreground">
+                <p>AI kategorizon dhe skanon postimet për kontakt, malware dhe çmim jashtë normave.</p>
+                <p className="mt-2">
+                  <span className="font-semibold text-foreground">Shkelje:</span> {count}/{max}
+                </p>
+              </div>
             </div>
           </aside>
 
@@ -181,15 +236,34 @@ function FeedPage() {
             <div className="card-elevated p-4">
               <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                 <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                Një postim / 24 orë — skanohet nga AI për malware dhe rreziqe.
+                Një postim / 24 orë — pa kontakt në tekst/foto. Kontakti hapet pas interesit + taksës.
               </div>
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 rows={3}
-                placeholder="Cfarë ofron sot?"
-                className="w-full resize-none rounded-md border border-border bg-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                disabled={isSuspended}
+                placeholder="Çfarë ofron sot? (mos përfshi tel/email/adresë — do të bllokohet)"
+                className="w-full resize-none rounded-md border border-border bg-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
               />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-input px-3 py-2 text-sm">
+                  <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                  <input
+                    inputMode="numeric"
+                    value={priceStr}
+                    onChange={(e) => setPriceStr(e.target.value.replace(/\D/g, ""))}
+                    disabled={isSuspended}
+                    placeholder="Çmimi (Lekë)"
+                    className="w-full bg-transparent outline-none placeholder:text-muted-foreground/70"
+                  />
+                  {priceStr && (
+                    <span className="whitespace-nowrap text-xs text-muted-foreground">
+                      taksë: {formatLek(calcServiceTax(Number(priceStr)))}
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {(Object.keys(CAT_META) as Category[]).map((c) => {
@@ -212,18 +286,25 @@ function FeedPage() {
                 <div className="flex items-center gap-2">
                   <button
                     className="grid h-9 w-9 place-items-center rounded-md border border-border text-muted-foreground hover:text-foreground"
-                    title="Bashkangjit (foto, PDF, DOC, ZIP, link)"
+                    title="Bashkangjit (foto, PDF, DOC, ZIP) — skanohet nga AI"
                   >
                     <Paperclip className="h-4 w-4" />
                   </button>
                   <button
                     onClick={submit}
-                    className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                    disabled={isSuspended}
+                    className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Send className="h-4 w-4" /> Posto
                   </button>
                 </div>
               </div>
+              {error && (
+                <div className="mt-3 flex items-start gap-2 rounded-md bg-destructive/15 px-3 py-2 text-xs text-destructive">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span className="whitespace-pre-line">{error}</span>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex items-center gap-2 text-sm font-semibold">
@@ -250,10 +331,21 @@ function FeedPage() {
                       </span>
                     </div>
                     <p className="mt-3 text-sm leading-relaxed">{p.body}</p>
-                    <div className="mt-4 flex items-center gap-4 border-t border-border/60 pt-3 text-xs text-[color:var(--color-success)]">
-                      <span className="inline-flex items-center gap-1.5">
-                        <ShieldCheck className="h-3.5 w-3.5" /> Autori i verifikuar
-                      </span>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="inline-flex items-center gap-1.5 text-[color:var(--color-success)]">
+                          <ShieldCheck className="h-3.5 w-3.5" /> Autori i verifikuar
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                          <Tag className="h-3.5 w-3.5" /> {formatLek(p.price)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setInterestFor(p)}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/25"
+                      >
+                        <HandCoins className="h-3.5 w-3.5" /> Shpreh interes
+                      </button>
                     </div>
                     <CommentSection initial={p.comments} />
                   </article>
@@ -283,7 +375,7 @@ function FeedPage() {
                         <div className="min-w-0">
                           <p className="truncate text-sm group-hover:text-primary">{p.body}</p>
                           <p className="truncate text-xs text-muted-foreground">
-                            {p.authorFullName} · {p.createdAt}
+                            {p.authorFullName} · {formatLek(p.price)}
                           </p>
                         </div>
                       </div>
@@ -295,6 +387,14 @@ function FeedPage() {
           </aside>
         </div>
       </main>
+
+      {interestFor && (
+        <InterestDialog
+          authorName={interestFor.authorFullName}
+          price={interestFor.price}
+          onClose={() => setInterestFor(null)}
+        />
+      )}
     </div>
   );
 }
