@@ -15,6 +15,8 @@ import {
   AlertTriangle,
   HandCoins,
   Tag,
+  Search,
+  Repeat2,
 } from "lucide-react";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { UserBadge } from "@/components/UserBadge";
@@ -22,6 +24,7 @@ import { CommentSection, type CommentItem } from "@/components/CommentSection";
 import { SuspensionBanner } from "@/components/SuspensionBanner";
 import { InterestDialog } from "@/components/InterestDialog";
 import { detectContact } from "@/lib/contactDetect";
+import { jaccard, DUPLICATE_THRESHOLD } from "@/lib/similarity";
 import { checkPrice } from "@/lib/priceCheck";
 import { calcServiceTax, formatLek } from "@/lib/taxCalc";
 import { useViolations } from "@/hooks/useViolations";
@@ -99,14 +102,24 @@ function FeedPage() {
   const [priceStr, setPriceStr] = useState("");
   const [cat, setCat] = useState<Category>("sherbim");
   const [filter, setFilter] = useState<Category | "all">("all");
+  const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [interestFor, setInterestFor] = useState<Post | null>(null);
   const { count, max, isSuspended, suspendedUntil, addViolation, reset } = useViolations();
 
-  const visible = useMemo(
-    () => (filter === "all" ? posts : posts.filter((p) => p.offerType === filter)),
-    [posts, filter],
-  );
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return posts.filter((p) => {
+      if (filter !== "all" && p.offerType !== filter) return false;
+      if (!q) return true;
+      return (
+        p.body.toLowerCase().includes(q) ||
+        p.authorFullName.toLowerCase().includes(q) ||
+        String(p.price).includes(q)
+      );
+    });
+  }, [posts, filter, query]);
 
   function submit() {
     setError(null);
@@ -141,26 +154,38 @@ function FeedPage() {
       return;
     }
 
-    setPosts([
-      {
-        id: crypto.randomUUID(),
-        authorFullName: "Ju Demo",
-        offerType: cat,
-        body: draft,
-        price,
-        createdAt: "tani",
-        comments: [],
-      },
-      ...posts,
-    ]);
+    const authorFullName = "Ju Demo";
+    const newPost: Post = {
+      id: crypto.randomUUID(),
+      authorFullName,
+      offerType: cat,
+      body: draft,
+      price,
+      createdAt: "tani",
+      comments: [],
+    };
+
+    // Dedupe: remove older near-duplicate posts from the same author.
+    const filtered = posts.filter((p) => {
+      if (p.authorFullName !== authorFullName) return true;
+      return jaccard(p.body, newPost.body) < DUPLICATE_THRESHOLD;
+    });
+    const removed = posts.length - filtered.length;
+
+    setPosts([newPost, ...filtered]);
     setDraft("");
     setPriceStr("");
+    setNotice(
+      removed > 0
+        ? `Postimi u publikua. ${removed} postim i mëparshëm i ngjashëm u fshi automatikisht.`
+        : null,
+    );
   }
 
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-6 py-4">
           <Link to="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" /> Kryefaqja
           </Link>
@@ -170,7 +195,20 @@ function FeedPage() {
             </span>
             Lidhjet
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="order-3 flex w-full items-center gap-2 md:order-2 md:w-auto md:flex-1 md:max-w-md">
+            <label className="flex w-full items-center gap-2 rounded-md border border-border bg-input px-3 py-2 text-sm">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Kërko në postime, autor, çmim…"
+                className="w-full bg-transparent outline-none placeholder:text-muted-foreground/70"
+                aria-label="Kërko postime"
+              />
+            </label>
+          </div>
+          <div className="order-2 flex items-center gap-2 md:order-3">
             <NotificationSettings />
             <Link to="/admin" className="text-xs text-muted-foreground hover:text-foreground">
               Admin
@@ -178,6 +216,7 @@ function FeedPage() {
           </div>
         </div>
       </header>
+
 
       <main className="mx-auto max-w-7xl px-6 py-8">
         {isSuspended && suspendedUntil && <SuspensionBanner until={suspendedUntil} onReset={reset} />}
@@ -303,6 +342,12 @@ function FeedPage() {
                 <div className="mt-3 flex items-start gap-2 rounded-md bg-destructive/15 px-3 py-2 text-xs text-destructive">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span className="whitespace-pre-line">{error}</span>
+                </div>
+              )}
+              {notice && !error && (
+                <div className="mt-3 flex items-start gap-2 rounded-md bg-primary/10 px-3 py-2 text-xs text-primary">
+                  <Repeat2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{notice}</span>
                 </div>
               )}
             </div>
