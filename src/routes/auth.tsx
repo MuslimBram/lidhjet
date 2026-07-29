@@ -22,6 +22,7 @@ export const Route = createFileRoute("/auth")({
 });
 
 type Method = "email" | "phone";
+type Mode = "register" | "login";
 type Step = "identify" | "otp" | "profile" | "done";
 
 function validateFullName(name: string) {
@@ -30,6 +31,7 @@ function validateFullName(name: string) {
 }
 
 function AuthPage() {
+  const [mode, setMode] = useState<Mode>("register");
   const [method, setMethod] = useState<Method>("email");
   const [step, setStep] = useState<Step>("identify");
   const [identifier, setIdentifier] = useState("");
@@ -43,6 +45,13 @@ function AuthPage() {
   const [tempName, setTempName] = useState("");
   const [tempError, setTempError] = useState<string | null>(null);
 
+  function switchMode(next: Mode) {
+    setMode(next);
+    setStep("identify");
+    setError(null);
+    setOtp("");
+  }
+
   function next() {
     setError(null);
     setLoading(true);
@@ -53,7 +62,11 @@ function AuthPage() {
         setStep("otp");
       } else if (step === "otp") {
         if (otp.length < 6) return setError("Kodi duhet të ketë 6 shifra.");
-        setStep("profile");
+        if (mode === "login") {
+          setStep("done");
+        } else {
+          setStep("profile");
+        }
       } else if (step === "profile") {
         if (!validateFullName(fullName)) {
           setTempName(fullName);
@@ -96,14 +109,44 @@ function AuthPage() {
       <main className="mx-auto flex max-w-md flex-col px-6 py-10">
         {step !== "done" && (
           <>
-            <h1 className="text-2xl font-bold tracking-tight">Krijo llogari të sigurt</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {mode === "register" ? "Krijo llogari të sigurt" : "Hyr në llogarinë tënde"}
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Verifikim 2FA i menjëhershëm + kontroll AI për email/numra të përkohshëm.
+              {mode === "register"
+                ? "Verifikim 2FA i menjëhershëm + kontroll AI për email/numra të përkohshëm."
+                : "Fut email-in ose numrin dhe kodin 2FA për të hyrë."}
             </p>
+
+            {/* Mode toggle: Regjistrohu / Hyr */}
+            <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg bg-input p-1">
+              <button
+                onClick={() => switchMode("register")}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  mode === "register"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Regjistrohu
+              </button>
+              <button
+                onClick={() => switchMode("login")}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  mode === "login"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Kam llogari — Hyr
+              </button>
+            </div>
 
             {/* Stepper */}
             <ol className="mt-6 flex items-center gap-2 text-xs">
-              {(["identify", "otp", "profile"] as Step[]).map((s, i) => {
+              {((mode === "register"
+                ? ["identify", "otp", "profile"]
+                : ["identify", "otp"]) as Step[]).map((s, i) => {
                 const active = step === s;
                 const done =
                   (step === "otp" && s === "identify") ||
@@ -230,7 +273,13 @@ function AuthPage() {
                 className="mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
               >
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                {step === "identify" ? "Dërgo kodin 2FA" : step === "otp" ? "Verifiko" : "Përfundo"}
+                {step === "identify"
+                  ? "Dërgo kodin 2FA"
+                  : step === "otp"
+                    ? mode === "login"
+                      ? "Hyr"
+                      : "Verifiko"
+                    : "Përfundo"}
               </button>
             </div>
           </>
@@ -241,16 +290,19 @@ function AuthPage() {
             <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[color:var(--color-warning)]/15 text-[color:var(--color-warning)] ring-1 ring-[color:var(--color-warning)]/30">
               <ShieldCheck className="h-6 w-6" />
             </div>
-            <h2 className="mt-4 text-lg font-semibold">Llogaria u dërgua për verifikim</h2>
+            <h2 className="mt-4 text-lg font-semibold">
+              {mode === "login" ? "Hyrja u konfirmua" : "Llogaria u dërgua për verifikim"}
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              AI po analizon emrin, email-in dhe të dhënat. Pas 24 orësh do të kërkohet 2FA
-              përfundimtar përpara aktivizimit.
+              {mode === "login"
+                ? "2FA u verifikua. Mund të kaloni në feed."
+                : "AI po analizon emrin, email-in dhe të dhënat. Pas 24 orësh do të kërkohet 2FA përfundimtar përpara aktivizimit."}
             </p>
             <Link
               to="/feed"
               className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
-              Shiko feed-in publik
+              {mode === "login" ? "Vazhdo në feed" : "Shiko feed-in publik"}
             </Link>
           </div>
         )}

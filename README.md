@@ -1,29 +1,32 @@
-# Welcome to your Lovable project
+# Lidhjet
 
-This project was built with [Lovable](https://lovable.dev).
+Rrjet i sigurt për profesionistë me verifikim identiteti, kontroll AI për kontakt/çmim/malware dhe moderim komuniteti.
 
-## Build with Lovable
+## Faza e zhvillimit
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+| Faza | Përmbajtja | Statusi |
+| --- | --- | --- |
+| 1 | UI reale në klient: kërkim (search), deduplikim automatik i postimeve të njëjta nga i njëjti autor, `/auth` i unifikuar (Regjistrohu / Hyr) | ✅ Përfunduar |
+| 2 | Njoftime auto për postime të reja (BroadcastChannel + Web Notifications), limit 1 post/24h, gate për chat pas taksës | ⏳ Në pritje |
+| 3 | Backend (Lovable Cloud): Auth OTP telefon/email, tabelat `profiles/posts/comments/attachments/violations` me RLS, storage | 🔒 Pret kreditet |
+| 4 | AI real (Lovable AI Gateway / Gemini): kontakt në foto & dokumente, çmim vs mediana, risk-score identiteti, punë 24h e miratimit | 🔒 Pret kreditet |
+| 5 | Panel admin operativ, email pezullimi, integrime TrueCaller / CallApp | 🔒 Pret kreditet |
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+Çdo fazë kryhet plotësisht: ekzekutohen testet e typecheck, korrigjohen gabimet, përditësohet README dhe raportohet përpara se të kalohet në fazën tjetër.
 
-## Development
+## Faza 1 — çka u shtua
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+- **Kërkim** në `/feed` me lupë (kërkon te teksti i postimit, autori, çmimi).
+- **Deduplikim automatik**: kur i njëjti autor poston përmbajtje mjaftueshëm të ngjashme (Jaccard ≥ 0.55 mbi tokenë), postimi i vjetër fshihet automatikisht dhe përdoruesi njoftohet.
+- **/auth i unifikuar**: switcher Regjistrohu / Hyr. Në modin *Hyr* stepper-i kalon direkt `Identifikim → 2FA → Feed`, pa hapin e profilit.
+
+## Zhvillimi
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
 npm i
 npm run dev
 ```
 
-## Built with
+## Teknologjitë
 
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+- TanStack Start · TypeScript · React · Tailwind CSS
