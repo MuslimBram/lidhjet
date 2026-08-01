@@ -109,6 +109,26 @@ function FeedPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [interestFor, setInterestFor] = useState<Post | null>(null);
   const { count, max, isSuspended, suspendedUntil, addViolation, reset } = useViolations();
+  const { canPost, remainingLabel, markPosted } = usePostLimit();
+  const { announce } = usePostNotifications((p) => {
+    setPosts((prev) =>
+      prev.some((x) => x.id === p.id)
+        ? prev
+        : [
+            {
+              id: p.id,
+              authorFullName: p.authorFullName,
+              offerType: (p.offerType as Category) ?? "tjeter",
+              body: p.body,
+              price: p.price,
+              createdAt: "tani",
+              comments: [],
+            },
+            ...prev,
+          ],
+    );
+  });
+
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
