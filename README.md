@@ -30,3 +30,9 @@ npm run dev
 ## Teknologjitë
 
 - TanStack Start · TypeScript · React · Tailwind CSS
+
+## Faza 2 — çka u shtua
+
+- **Njoftime automatike për çdo postim të re**: `src/hooks/usePostNotifications.ts` (BroadcastChannel ndër-skeda + Web Notifications) me respekt të modalitetit dridhje / beep / normal / heshtje (`src/lib/notify.ts`).
+- **Limit real 1 postim / 24 orë**: `src/hooks/usePostLimit.ts` — composer-i bllokohet dhe shfaqet numërimi i kohës së mbetur.
+- **Gate i chat-it**: kanali i komunikimit hapet vetëm pas interesit të blerësit + pagesës së taksës sipas intervalit të çmimit.
