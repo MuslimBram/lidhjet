@@ -154,6 +154,9 @@ function FeedPage() {
     });
   }, [posts, filter, query]);
 
+  const suggestion = useMemo(() => suggestCategory(draft), [draft]);
+
+
   function publish(price: number, justification?: string) {
     const authorFullName = "Ju Demo";
     const newPost: Post = {
@@ -513,6 +516,27 @@ function FeedPage() {
           onClose={() => setInterestFor(null)}
         />
       )}
+
+      {justifyFor && (
+        <PriceJustifyDialog
+          reason={justifyFor.reason}
+          onCancel={() => {
+            const { count: c, suspendedUntil: su } = addViolation("price", justifyFor.reason);
+            setJustifyFor(null);
+            setError(
+              `Çmimi jashtë normave pa justifikim. Shkelje: ${c}/${max}${
+                su ? " — llogaria u pezullua për 7 ditë." : ""
+              }`,
+            );
+          }}
+          onSubmit={(justification) => {
+            const price = justifyFor.price;
+            setJustifyFor(null);
+            publish(price, justification);
+          }}
+        />
+      )}
+
     </div>
   );
 }
