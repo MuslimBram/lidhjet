@@ -309,18 +309,28 @@ function FeedPage() {
           {/* Center: Feed */}
           <section className="md:col-span-2">
             <div className="card-elevated p-4">
-              <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <ShieldCheck className="h-3.5 w-3.5 text-primary" />
                 Një postim / 24 orë — pa kontakt në tekst/foto. Kontakti hapet pas interesit + taksës.
+                {!canPost && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--color-warning)]/15 px-2.5 py-1 text-[color:var(--color-warning)]">
+                    <Clock className="h-3.5 w-3.5" /> Postimi i radhës pas {remainingLabel}
+                  </span>
+                )}
               </div>
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 rows={3}
-                disabled={isSuspended}
-                placeholder="Çfarë ofron sot? (mos përfshi tel/email/adresë — do të bllokohet)"
+                disabled={isSuspended || !canPost}
+                placeholder={
+                  canPost
+                    ? "Çfarë ofron sot? (mos përfshi tel/email/adresë — do të bllokohet)"
+                    : `Limiti 1 postim / 24 orë — provoni pas ${remainingLabel}`
+                }
                 className="w-full resize-none rounded-md border border-border bg-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
               />
+
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-input px-3 py-2 text-sm">
                   <Tag className="h-3.5 w-3.5 text-muted-foreground" />
