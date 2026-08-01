@@ -149,7 +149,12 @@ function FeedPage() {
       setError("Llogaria juaj është pezulluar. Nuk mund të postoni deri në përfundim.");
       return;
     }
+    if (!canPost) {
+      setError(`Limiti: 1 postim / 24 orë. Mund të postoni përsëri pas ${remainingLabel}.`);
+      return;
+    }
     if (!draft.trim()) return;
+
 
     // 1) Contact detection (mock AI)
     const hits = detectContact(draft);
