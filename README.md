@@ -7,7 +7,7 @@ Rrjet i sigurt për profesionistë me verifikim identiteti, kontroll AI për kon
 | Faza | Përmbajtja | Statusi |
 | --- | --- | --- |
 | 1 | UI reale në klient: kërkim (search), deduplikim automatik i postimeve të njëjta nga i njëjti autor, `/auth` i unifikuar (Regjistrohu / Hyr) | ✅ Përfunduar |
-| 2 | Njoftime auto për postime të reja (BroadcastChannel + Web Notifications), limit 1 post/24h, gate për chat pas taksës | ⏳ Në pritje |
+| 2 | Njoftime auto për postime të reja (BroadcastChannel + Web Notifications), limit 1 post/24h, gate për chat pas taksës | ✅ Përfunduar |
 | 3 | Backend (Lovable Cloud): Auth OTP telefon/email, tabelat `profiles/posts/comments/attachments/violations` me RLS, storage | 🔒 Pret kreditet |
 | 4 | AI real (Lovable AI Gateway / Gemini): kontakt në foto & dokumente, çmim vs mediana, risk-score identiteti, punë 24h e miratimit | 🔒 Pret kreditet |
 | 5 | Panel admin operativ, email pezullimi, integrime TrueCaller / CallApp | 🔒 Pret kreditet |
