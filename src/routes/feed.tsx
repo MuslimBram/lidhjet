@@ -28,6 +28,8 @@ import { jaccard, DUPLICATE_THRESHOLD } from "@/lib/similarity";
 import { checkPrice } from "@/lib/priceCheck";
 import { calcServiceTax, formatLek } from "@/lib/taxCalc";
 import { useViolations } from "@/hooks/useViolations";
+import { usePostLimit } from "@/hooks/usePostLimit";
+import { usePostNotifications } from "@/hooks/usePostNotifications";
 
 export const Route = createFileRoute("/feed")({
   head: () => ({
@@ -107,6 +109,26 @@ function FeedPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [interestFor, setInterestFor] = useState<Post | null>(null);
   const { count, max, isSuspended, suspendedUntil, addViolation, reset } = useViolations();
+  const { canPost, remainingLabel, markPosted } = usePostLimit();
+  const { announce } = usePostNotifications((p) => {
+    setPosts((prev) =>
+      prev.some((x) => x.id === p.id)
+        ? prev
+        : [
+            {
+              id: p.id,
+              authorFullName: p.authorFullName,
+              offerType: (p.offerType as Category) ?? "tjeter",
+              body: p.body,
+              price: p.price,
+              createdAt: "tani",
+              comments: [],
+            },
+            ...prev,
+          ],
+    );
+  });
+
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -127,7 +149,12 @@ function FeedPage() {
       setError("Llogaria juaj është pezulluar. Nuk mund të postoni deri në përfundim.");
       return;
     }
+    if (!canPost) {
+      setError(`Limiti: 1 postim / 24 orë. Mund të postoni përsëri pas ${remainingLabel}.`);
+      return;
+    }
     if (!draft.trim()) return;
+
 
     // 1) Contact detection (mock AI)
     const hits = detectContact(draft);
@@ -175,11 +202,20 @@ function FeedPage() {
     setPosts([newPost, ...filtered]);
     setDraft("");
     setPriceStr("");
+    markPosted();
+    announce({
+      id: newPost.id,
+      authorFullName,
+      body: newPost.body,
+      offerType: newPost.offerType,
+      price: newPost.price,
+    });
     setNotice(
       removed > 0
-        ? `Postimi u publikua. ${removed} postim i mëparshëm i ngjashëm u fshi automatikisht.`
-        : null,
+        ? `Postimi u publikua. ${removed} postim i mëparshëm i ngjashëm u fshi automatikisht. Të gjithë anëtarët u njoftuan.`
+        : "Postimi u publikua. Të gjithë anëtarët u njoftuan.",
     );
+
   }
 
   return (
@@ -273,18 +309,28 @@ function FeedPage() {
           {/* Center: Feed */}
           <section className="md:col-span-2">
             <div className="card-elevated p-4">
-              <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <ShieldCheck className="h-3.5 w-3.5 text-primary" />
                 Një postim / 24 orë — pa kontakt në tekst/foto. Kontakti hapet pas interesit + taksës.
+                {!canPost && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--color-warning)]/15 px-2.5 py-1 text-[color:var(--color-warning)]">
+                    <Clock className="h-3.5 w-3.5" /> Postimi i radhës pas {remainingLabel}
+                  </span>
+                )}
               </div>
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 rows={3}
-                disabled={isSuspended}
-                placeholder="Çfarë ofron sot? (mos përfshi tel/email/adresë — do të bllokohet)"
+                disabled={isSuspended || !canPost}
+                placeholder={
+                  canPost
+                    ? "Çfarë ofron sot? (mos përfshi tel/email/adresë — do të bllokohet)"
+                    : `Limiti 1 postim / 24 orë — provoni pas ${remainingLabel}`
+                }
                 className="w-full resize-none rounded-md border border-border bg-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
               />
+
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-input px-3 py-2 text-sm">
                   <Tag className="h-3.5 w-3.5 text-muted-foreground" />
@@ -331,7 +377,8 @@ function FeedPage() {
                   </button>
                   <button
                     onClick={submit}
-                    disabled={isSuspended}
+                    disabled={isSuspended || !canPost}
+
                     className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Send className="h-4 w-4" /> Posto
