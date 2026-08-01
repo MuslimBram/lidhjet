@@ -60,7 +60,10 @@ interface Post {
   price: number;
   createdAt: string;
   comments: CommentItem[];
+  attachments?: string[];
+  justification?: string;
 }
+
 
 const SEED: Post[] = [
   {
@@ -148,44 +151,7 @@ function FeedPage() {
     });
   }, [posts, filter, query]);
 
-  function submit() {
-    setError(null);
-    if (isSuspended) {
-      setError("Llogaria juaj është pezulluar. Nuk mund të postoni deri në përfundim.");
-      return;
-    }
-    if (!canPost) {
-      setError(`Limiti: 1 postim / 24 orë. Mund të postoni përsëri pas ${remainingLabel}.`);
-      return;
-    }
-    if (!draft.trim()) return;
-
-
-    // 1) Contact detection (mock AI)
-    const hits = detectContact(draft);
-    if (hits.length > 0) {
-      const list = hits.map((h) => h.label).join(", ");
-      const reason = `Postimi përmban informacion kontakti (${list}). Kontakti lejohet vetëm pas pagesës së taksës dhe interesit të blerësit.`;
-      const { count: c, suspendedUntil: su } = addViolation("contact", reason);
-      setError(
-        `${reason}\nShkelje: ${c}/${max}${su ? " — llogaria u pezullua për 7 ditë." : ""}`,
-      );
-      return;
-    }
-
-    // 2) Price validation (mock AI)
-    const price = Number(priceStr.replace(/\D/g, ""));
-    const pc = checkPrice(price, cat);
-    if (!pc.ok) {
-      const { count: c, suspendedUntil: su } = addViolation("price", pc.reason!);
-      setError(
-        `Çmimi i deklaruar nuk është brenda normave të tregut. ${pc.reason}\nShkelje: ${c}/${max}${
-          su ? " — llogaria u pezullua për 7 ditë." : ""
-        }`,
-      );
-      return;
-    }
-
+  function publish(price: number, justification?: string) {
     const authorFullName = "Ju Demo";
     const newPost: Post = {
       id: crypto.randomUUID(),
@@ -195,6 +161,8 @@ function FeedPage() {
       price,
       createdAt: "tani",
       comments: [],
+      attachments: attachments.map((a) => a.file.name),
+      justification,
     };
 
     // Dedupe: remove older near-duplicate posts from the same author.
@@ -207,6 +175,7 @@ function FeedPage() {
     setPosts([newPost, ...filtered]);
     setDraft("");
     setPriceStr("");
+    setAttachments([]);
     markPosted();
     announce({
       id: newPost.id,
@@ -216,12 +185,61 @@ function FeedPage() {
       price: newPost.price,
     });
     setNotice(
-      removed > 0
-        ? `Postimi u publikua. ${removed} postim i mëparshëm i ngjashëm u fshi automatikisht. Të gjithë anëtarët u njoftuan.`
-        : "Postimi u publikua. Të gjithë anëtarët u njoftuan.",
+      [
+        "Postimi u publikua. Të gjithë anëtarët u njoftuan.",
+        removed > 0 ? `${removed} postim i mëparshëm i ngjashëm u fshi automatikisht.` : "",
+        newPost.attachments.length > 0
+          ? `${newPost.attachments.length} bashkëngjitje kaluan skanimin.`
+          : "",
+        justification ? "Justifikimi i çmimit u dërgua për shqyrtim." : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
     );
-
   }
+
+  function submit() {
+    setError(null);
+    setNotice(null);
+    if (isSuspended) {
+      setError("Llogaria juaj është pezulluar. Nuk mund të postoni deri në përfundim.");
+      return;
+    }
+    if (!canPost) {
+      setError(`Limiti: 1 postim / 24 orë. Mund të postoni përsëri pas ${remainingLabel}.`);
+      return;
+    }
+    if (!draft.trim()) return;
+
+    // 1) Contact detection (tekst)
+    const hits = detectContact(draft);
+    if (hits.length > 0) {
+      const list = hits.map((h) => h.label).join(", ");
+      const reason = `Postimi përmban informacion kontakti (${list}). Kontakti lejohet vetëm pas pagesës së taksës dhe interesit të blerësit.`;
+      const { count: c, suspendedUntil: su } = addViolation("contact", reason);
+      setError(
+        `${reason}\nShkelje: ${c}/${max}${su ? " — llogaria u pezullua për 7 ditë." : ""}`,
+      );
+      return;
+    }
+
+    // 2) Bashkëngjitjet duhet të kenë kaluar skanimin
+    if (attachments.some((a) => a.verdict === "blocked")) {
+      setError("Hiqni bashkëngjitjet e bllokuara përpara publikimit.");
+      return;
+    }
+
+    // 3) Price validation — jashtë normave hap justifikimin, jo shkelje direkt
+    const price = Number(priceStr.replace(/\D/g, ""));
+    const pc = checkPrice(price, cat);
+    if (!pc.ok) {
+      setJustifyFor({ price, reason: pc.reason! });
+      return;
+    }
+
+    publish(price);
+  }
+
 
   return (
     <div className="min-h-screen">
@@ -374,12 +392,11 @@ function FeedPage() {
                   })}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    className="grid h-9 w-9 place-items-center rounded-md border border-border text-muted-foreground hover:text-foreground"
-                    title="Bashkangjit (foto, PDF, DOC, ZIP) — skanohet nga AI"
-                  >
-                    <Paperclip className="h-4 w-4" />
-                  </button>
+                  <AttachmentPicker
+                    disabled={isSuspended || !canPost}
+                    onChange={setAttachments}
+                  />
+
                   <button
                     onClick={submit}
                     disabled={isSuspended || !canPost}
