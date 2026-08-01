@@ -202,11 +202,20 @@ function FeedPage() {
     setPosts([newPost, ...filtered]);
     setDraft("");
     setPriceStr("");
+    markPosted();
+    announce({
+      id: newPost.id,
+      authorFullName,
+      body: newPost.body,
+      offerType: newPost.offerType,
+      price: newPost.price,
+    });
     setNotice(
       removed > 0
-        ? `Postimi u publikua. ${removed} postim i mëparshëm i ngjashëm u fshi automatikisht.`
-        : null,
+        ? `Postimi u publikua. ${removed} postim i mëparshëm i ngjashëm u fshi automatikisht. Të gjithë anëtarët u njoftuan.`
+        : "Postimi u publikua. Të gjithë anëtarët u njoftuan.",
     );
+
   }
 
   return (
