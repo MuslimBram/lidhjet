@@ -116,6 +116,9 @@ function FeedPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [interestFor, setInterestFor] = useState<Post | null>(null);
+  const [attachments, setAttachments] = useState<ScanResult[]>([]);
+  const [justifyFor, setJustifyFor] = useState<{ price: number; reason: string } | null>(null);
+
   const { count, max, isSuspended, suspendedUntil, addViolation, reset } = useViolations();
   const { canPost, remainingLabel, markPosted } = usePostLimit();
   const { announce } = usePostNotifications((p) => {
@@ -188,9 +191,10 @@ function FeedPage() {
       [
         "Postimi u publikua. Të gjithë anëtarët u njoftuan.",
         removed > 0 ? `${removed} postim i mëparshëm i ngjashëm u fshi automatikisht.` : "",
-        newPost.attachments.length > 0
+        newPost.attachments && newPost.attachments.length > 0
           ? `${newPost.attachments.length} bashkëngjitje kaluan skanimin.`
           : "",
+
         justification ? "Justifikimi i çmimit u dërgua për shqyrtim." : "",
       ]
         .filter(Boolean)
