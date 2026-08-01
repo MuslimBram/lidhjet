@@ -28,6 +28,8 @@ import { jaccard, DUPLICATE_THRESHOLD } from "@/lib/similarity";
 import { checkPrice } from "@/lib/priceCheck";
 import { calcServiceTax, formatLek } from "@/lib/taxCalc";
 import { useViolations } from "@/hooks/useViolations";
+import { usePostLimit } from "@/hooks/usePostLimit";
+import { usePostNotifications } from "@/hooks/usePostNotifications";
 
 export const Route = createFileRoute("/feed")({
   head: () => ({
