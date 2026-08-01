@@ -23,13 +23,18 @@ import { UserBadge } from "@/components/UserBadge";
 import { CommentSection, type CommentItem } from "@/components/CommentSection";
 import { SuspensionBanner } from "@/components/SuspensionBanner";
 import { InterestDialog } from "@/components/InterestDialog";
+import { AttachmentPicker } from "@/components/AttachmentPicker";
+import { PriceJustifyDialog } from "@/components/PriceJustifyDialog";
 import { detectContact } from "@/lib/contactDetect";
 import { jaccard, DUPLICATE_THRESHOLD } from "@/lib/similarity";
 import { checkPrice } from "@/lib/priceCheck";
+import { suggestCategory } from "@/lib/autoCategory";
+import type { ScanResult } from "@/lib/fileScan";
 import { calcServiceTax, formatLek } from "@/lib/taxCalc";
 import { useViolations } from "@/hooks/useViolations";
 import { usePostLimit } from "@/hooks/usePostLimit";
 import { usePostNotifications } from "@/hooks/usePostNotifications";
+
 
 export const Route = createFileRoute("/feed")({
   head: () => ({
