@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import {
   ShieldCheck,
   Send,
-  Paperclip,
+  Sparkles,
   Briefcase,
   Wrench,
   Store,
@@ -379,6 +379,17 @@ function FeedPage() {
                   )}
                 </div>
               </div>
+              {suggestion.score >= 3 && suggestion.category !== cat && (
+                <button
+                  onClick={() => setCat(suggestion.category)}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-2.5 py-1 text-xs text-accent"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  AI sugjeron kategorinë “{CAT_META[suggestion.category].label}”
+                  {suggestion.matched[0] ? ` (“${suggestion.matched[0]}”)` : ""} — kliko për t'e zbatuar
+                </button>
+              )}
+
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {(Object.keys(CAT_META) as Category[]).map((c) => {
