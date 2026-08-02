@@ -283,12 +283,42 @@ function AuthPage() {
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     inputMode="numeric"
-                    placeholder="123456"
+                    placeholder="——————"
                     className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 text-center text-lg tracking-[0.5em] outline-none ring-primary/40 focus:ring-2"
                   />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Kodi u dërgua në {identifier}. (Demo: fut çdo 6 shifra.)
-                  </p>
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      Kodi u dërgua për <span className="text-foreground">{identifier}</span>
+                      {expiresIn > 0 && <> · skadon pas {Math.floor(expiresIn / 60)}:{String(expiresIn % 60).padStart(2, "0")}</>}
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (!canResend(challenge)) return;
+                        sendCode();
+                        setError(null);
+                      }}
+                      disabled={resendIn > 0}
+                      className="rounded-md border border-border px-2 py-1 text-xs hover:text-foreground disabled:opacity-50"
+                    >
+                      {resendIn > 0 ? `Ridërgo (${resendIn}s)` : "Ridërgo kodin"}
+                    </button>
+                  </div>
+
+                  {challenge && (
+                    <div className="mt-3 rounded-md border border-primary/40 bg-primary/10 p-3">
+                      <p className="flex items-center gap-2 text-xs font-medium text-primary">
+                        <BellRing className="h-3.5 w-3.5" /> Kodi i dorëzuar në këtë pajisje
+                      </p>
+                      <p className="mt-1 font-mono text-2xl tracking-[0.3em] text-foreground">
+                        {challenge.code}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Kodi është i rastësishëm dhe verifikohet me përputhje të saktë. Dërgimi me
+                        SMS/email aktivizohet kur ndizet backend-i — deri atëherë dorëzohet vetëm
+                        në pajisje.
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
 
