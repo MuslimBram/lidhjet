@@ -55,12 +55,31 @@ function AuthPage() {
   const [showClarify, setShowClarify] = useState(false);
   const [tempName, setTempName] = useState("");
   const [tempError, setTempError] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<OtpChallenge | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [notifState, setNotifState] = useState<string>("");
 
-  function switchMode(next: Mode) {
-    setMode(next);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  function switchMode(nextMode: Mode) {
+    setMode(nextMode);
     setStep("identify");
     setError(null);
     setOtp("");
+    clearChallenge();
+    setChallenge(null);
+  }
+
+  function sendCode() {
+    const c = createChallenge(identifier.trim(), mode === "login" ? "login" : "register");
+    setChallenge(c);
+    setOtp("");
+    // Pa backend email/SMS, kodi dorëzohet në pajisje (njoftim + panel).
+    notifyUser("Kodi 2FA — Lidhjet", `Kodi juaj: ${c.code} (skadon pas 5 minutash)`);
+    return c;
   }
 
   function next() {
@@ -69,11 +88,31 @@ function AuthPage() {
     setTimeout(() => {
       setLoading(false);
       if (step === "identify") {
-        if (!identifier) return setError("Plotësoni fushën.");
+        if (!identifier.trim()) return setError("Plotësoni fushën.");
+        if (mode === "login" && !getUsers().some((u) => u.identifier === identifier.trim())) {
+          return setError("Nuk ka llogari me këtë email/numër. Regjistrohu më parë.");
+        }
+        sendCode();
         setStep("otp");
       } else if (step === "otp") {
         if (otp.length < 6) return setError("Kodi duhet të ketë 6 shifra.");
+        const res = verifyCode(otp);
+        if (!res.ok) {
+          setChallenge(getChallenge());
+          setOtp("");
+          if (res.reason === "mismatch")
+            return setError(`Kodi është i pasaktë. Tentativa të mbetura: ${res.left}.`);
+          if (res.reason === "expired") return setError("Kodi skadoi. Dërgo një kod të re.");
+          if (res.reason === "locked")
+            return setError(
+              `U tejkaluan ${OTP_MAX_ATTEMPTS} tentativa. Dërgo një kod të re për të vazhduar.`,
+            );
+          return setError("Nuk ka kod aktiv. Dërgo një kod të re.");
+        }
+        setChallenge(null);
         if (mode === "login") {
+          const u = setCurrentUserByIdentifier(identifier.trim());
+          if (u) void ensureNotificationPermission().then((p) => setNotifState(String(p)));
           setStep("done");
         } else {
           setStep("profile");
@@ -85,9 +124,20 @@ function AuthPage() {
           setShowClarify(true);
           return;
         }
-        setStep("done");
+        completeRegistration(fullName.trim().replace(/\s+/g, " "));
       }
-    }, 500);
+    }, 400);
+  }
+
+  function completeRegistration(name: string) {
+    registerUser({
+      identifier: identifier.trim(),
+      method,
+      fullName: name,
+      offerType,
+    });
+    void ensureNotificationPermission().then((p) => setNotifState(String(p)));
+    setStep("done");
   }
 
   function saveClarified() {
@@ -95,10 +145,16 @@ function AuthPage() {
       setTempError("Ju lutemi vendosni Emrin dhe Mbiemrin e plotë (pa iniciale, numra ose simbole).");
       return;
     }
-    setFullName(tempName.trim().replace(/\s+/g, " "));
+    const clean = tempName.trim().replace(/\s+/g, " ");
+    setFullName(clean);
     setShowClarify(false);
-    setStep("done");
+    completeRegistration(clean);
   }
+
+  const resendIn = challenge
+    ? Math.max(0, Math.ceil((challenge.createdAt + 30_000 - now) / 1000))
+    : 0;
+  const expiresIn = challenge ? Math.max(0, Math.ceil((challenge.expiresAt - now) / 1000)) : 0;
 
   return (
     <div className="min-h-screen">
