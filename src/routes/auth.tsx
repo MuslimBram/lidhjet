@@ -1,6 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { Mail, Smartphone, ShieldCheck, ArrowLeft, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Mail, Smartphone, ShieldCheck, ArrowLeft, Loader2, BellRing } from "lucide-react";
+import {
+  createChallenge,
+  getChallenge,
+  verifyCode,
+  canResend,
+  clearChallenge,
+  OTP_MAX_ATTEMPTS,
+  type OtpChallenge,
+} from "@/lib/otp";
+import { ensureNotificationPermission, notifyUser } from "@/lib/notify";
+import { registerUser, setCurrentUserByIdentifier, getUsers } from "@/lib/users";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -44,12 +55,31 @@ function AuthPage() {
   const [showClarify, setShowClarify] = useState(false);
   const [tempName, setTempName] = useState("");
   const [tempError, setTempError] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<OtpChallenge | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [notifState, setNotifState] = useState<string>("");
 
-  function switchMode(next: Mode) {
-    setMode(next);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  function switchMode(nextMode: Mode) {
+    setMode(nextMode);
     setStep("identify");
     setError(null);
     setOtp("");
+    clearChallenge();
+    setChallenge(null);
+  }
+
+  function sendCode() {
+    const c = createChallenge(identifier.trim(), mode === "login" ? "login" : "register");
+    setChallenge(c);
+    setOtp("");
+    // Pa backend email/SMS, kodi dorëzohet në pajisje (njoftim + panel).
+    notifyUser("Kodi 2FA — Lidhjet", `Kodi juaj: ${c.code} (skadon pas 5 minutash)`);
+    return c;
   }
 
   function next() {
@@ -58,11 +88,31 @@ function AuthPage() {
     setTimeout(() => {
       setLoading(false);
       if (step === "identify") {
-        if (!identifier) return setError("Plotësoni fushën.");
+        if (!identifier.trim()) return setError("Plotësoni fushën.");
+        if (mode === "login" && !getUsers().some((u) => u.identifier === identifier.trim())) {
+          return setError("Nuk ka llogari me këtë email/numër. Regjistrohu më parë.");
+        }
+        sendCode();
         setStep("otp");
       } else if (step === "otp") {
         if (otp.length < 6) return setError("Kodi duhet të ketë 6 shifra.");
+        const res = verifyCode(otp);
+        if (!res.ok) {
+          setChallenge(getChallenge());
+          setOtp("");
+          if (res.reason === "mismatch")
+            return setError(`Kodi është i pasaktë. Tentativa të mbetura: ${res.left}.`);
+          if (res.reason === "expired") return setError("Kodi skadoi. Dërgo një kod të re.");
+          if (res.reason === "locked")
+            return setError(
+              `U tejkaluan ${OTP_MAX_ATTEMPTS} tentativa. Dërgo një kod të re për të vazhduar.`,
+            );
+          return setError("Nuk ka kod aktiv. Dërgo një kod të re.");
+        }
+        setChallenge(null);
         if (mode === "login") {
+          const u = setCurrentUserByIdentifier(identifier.trim());
+          if (u) void ensureNotificationPermission().then((p) => setNotifState(String(p)));
           setStep("done");
         } else {
           setStep("profile");
@@ -74,9 +124,20 @@ function AuthPage() {
           setShowClarify(true);
           return;
         }
-        setStep("done");
+        completeRegistration(fullName.trim().replace(/\s+/g, " "));
       }
-    }, 500);
+    }, 400);
+  }
+
+  function completeRegistration(name: string) {
+    registerUser({
+      identifier: identifier.trim(),
+      method,
+      fullName: name,
+      offerType,
+    });
+    void ensureNotificationPermission().then((p) => setNotifState(String(p)));
+    setStep("done");
   }
 
   function saveClarified() {
@@ -84,10 +145,16 @@ function AuthPage() {
       setTempError("Ju lutemi vendosni Emrin dhe Mbiemrin e plotë (pa iniciale, numra ose simbole).");
       return;
     }
-    setFullName(tempName.trim().replace(/\s+/g, " "));
+    const clean = tempName.trim().replace(/\s+/g, " ");
+    setFullName(clean);
     setShowClarify(false);
-    setStep("done");
+    completeRegistration(clean);
   }
+
+  const resendIn = challenge
+    ? Math.max(0, Math.ceil((challenge.createdAt + 30_000 - now) / 1000))
+    : 0;
+  const expiresIn = challenge ? Math.max(0, Math.ceil((challenge.expiresAt - now) / 1000)) : 0;
 
   return (
     <div className="min-h-screen">
@@ -216,12 +283,42 @@ function AuthPage() {
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     inputMode="numeric"
-                    placeholder="123456"
+                    placeholder="——————"
                     className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 text-center text-lg tracking-[0.5em] outline-none ring-primary/40 focus:ring-2"
                   />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Kodi u dërgua në {identifier}. (Demo: fut çdo 6 shifra.)
-                  </p>
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      Kodi u dërgua për <span className="text-foreground">{identifier}</span>
+                      {expiresIn > 0 && <> · skadon pas {Math.floor(expiresIn / 60)}:{String(expiresIn % 60).padStart(2, "0")}</>}
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (!canResend(challenge)) return;
+                        sendCode();
+                        setError(null);
+                      }}
+                      disabled={resendIn > 0}
+                      className="rounded-md border border-border px-2 py-1 text-xs hover:text-foreground disabled:opacity-50"
+                    >
+                      {resendIn > 0 ? `Ridërgo (${resendIn}s)` : "Ridërgo kodin"}
+                    </button>
+                  </div>
+
+                  {challenge && (
+                    <div className="mt-3 rounded-md border border-primary/40 bg-primary/10 p-3">
+                      <p className="flex items-center gap-2 text-xs font-medium text-primary">
+                        <BellRing className="h-3.5 w-3.5" /> Kodi i dorëzuar në këtë pajisje
+                      </p>
+                      <p className="mt-1 font-mono text-2xl tracking-[0.3em] text-foreground">
+                        {challenge.code}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Kodi është i rastësishëm dhe verifikohet me përputhje të saktë. Dërgimi me
+                        SMS/email aktivizohet kur ndizet backend-i — deri atëherë dorëzohet vetëm
+                        në pajisje.
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -298,6 +395,21 @@ function AuthPage() {
                 ? "2FA u verifikua. Mund të kaloni në feed."
                 : "AI po analizon emrin, email-in dhe të dhënat. Pas 24 orësh do të kërkohet 2FA përfundimtar përpara aktivizimit."}
             </p>
+            <div className="mt-4 rounded-md border border-border bg-input/50 p-3 text-left text-xs text-muted-foreground">
+              <p className="flex items-center gap-2 font-medium text-foreground">
+                <BellRing className="h-3.5 w-3.5" /> Njoftimet
+              </p>
+              <p className="mt-1">
+                Leja e njoftimeve: <span className="text-foreground">{notifState || "në pritje"}</span>
+                {" · "}Marrës të regjistruar: <span className="text-foreground">{getUsers().length}</span>
+              </p>
+              <button
+                onClick={() => notifyUser("Test njoftimi — Lidhjet", "Njoftimet punojnë siç duhet.")}
+                className="mt-2 rounded-md border border-border px-2 py-1 hover:text-foreground"
+              >
+                Testo njoftimin
+              </button>
+            </div>
             <Link
               to="/feed"
               className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
