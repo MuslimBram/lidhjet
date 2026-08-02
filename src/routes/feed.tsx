@@ -17,6 +17,10 @@ import {
   Tag,
   Search,
   Repeat2,
+  Star,
+  ShoppingBag,
+  MessageSquare,
+
 } from "lucide-react";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { UserBadge } from "@/components/UserBadge";
