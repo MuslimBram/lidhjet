@@ -169,7 +169,7 @@ function FeedPage() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return posts.filter((p) => {
+    const matched = posts.filter((p) => {
       if (filter !== "all" && p.offerType !== filter) return false;
       if (!q) return true;
       return (
@@ -178,7 +178,9 @@ function FeedPage() {
         String(p.price).includes(q)
       );
     });
-  }, [posts, filter, query]);
+    return sortPosts(matched, sortKey);
+  }, [posts, filter, query, sortKey]);
+
 
   const suggestion = useMemo(() => suggestCategory(draft), [draft]);
 
