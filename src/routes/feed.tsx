@@ -70,6 +70,9 @@ interface Post {
 
 
 
+const HOUR = 3_600_000;
+const NOW = Date.UTC(2026, 7, 2, 6, 0, 0);
+
 const SEED: Post[] = [
   {
     id: "1",
@@ -78,6 +81,10 @@ const SEED: Post[] = [
     body: "Elektricist i licencuar. Instalime, riparime, kontrata mirëmbajtjeje.",
     price: 3500,
     createdAt: "2 orë më parë",
+    createdAtMs: NOW - 2 * HOUR,
+    rating: 4.8,
+    ratingCount: 41,
+    sales: 63,
     comments: [{ author: "Elira Kola", body: "A punoni edhe në zonën time?" }],
   },
   {
@@ -87,6 +94,10 @@ const SEED: Post[] = [
     body: "Shes olive extra virgin nga ferma familjare. 5L / 15L, certifikatë analize.",
     price: 12000,
     createdAt: "5 orë më parë",
+    createdAtMs: NOW - 5 * HOUR,
+    rating: 4.5,
+    ratingCount: 12,
+    sales: 128,
     comments: [],
   },
   {
@@ -96,9 +107,14 @@ const SEED: Post[] = [
     body: "Kërkoj punë part-time si përkthyese IT/EN (5+ vite eksperiencë). CV i verifikuar.",
     price: 45000,
     createdAt: "1 ditë më parë",
+    createdAtMs: NOW - 24 * HOUR,
+    rating: 5,
+    ratingCount: 3,
+    sales: 7,
     comments: [],
   },
 ];
+
 
 const CAT_META: Record<Category, { icon: typeof Briefcase; label: string; className: string }> = {
   pune: { icon: Briefcase, label: "Punë", className: "bg-primary/15 text-primary" },
