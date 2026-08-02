@@ -45,3 +45,15 @@ npm run dev
 - **Kategorizim automatik** (`src/lib/autoCategory.ts`): AI sugjeron Punë / Shërbim / Tregti nga teksti; sugjerimi zbatohet me një klik.
 - **Justifikim çmimi** (`src/components/PriceJustifyDialog.tsx`): çmimi jashtë normave nuk regjistrohet më direkt si shkelje — kërkohet arsyetim (min. 5 fjalë); anulimi shënon shkeljen (3 → pezullim 7 ditë).
 
+
+## Faza 3.5 — filtrat e rezultateve të kërkimit
+
+Kur kërkohet një produkt/shërbim, rezultatet renditen sipas kritereve reale (`src/lib/sortPosts.ts`, UI `src/components/SortBar.tsx`):
+
+- **Më të rejat** (koha e publikimit)
+- **Vlerësimi më i lartë** — renditje Bayesian e ponderuar (1 vlerësim 5★ nuk kalon 40 vlerësime 4.8★)
+- **Më të komentuarat**
+- **Më të shiturat**
+- **Çmimi** i ulët → i lartë dhe i lartë → i ulët
+
+Çdo postim shfaq tani vlerësimin, numrin e vlerësimeve, shitjet dhe komentet. Filtrat punojnë të kombinuar me lupën e kërkimit dhe kategoritë.
