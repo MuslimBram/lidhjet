@@ -34,6 +34,8 @@ import { calcServiceTax, formatLek } from "@/lib/taxCalc";
 import { useViolations } from "@/hooks/useViolations";
 import { usePostLimit } from "@/hooks/usePostLimit";
 import { usePostNotifications } from "@/hooks/usePostNotifications";
+import { sortPosts, type SortKey } from "@/lib/sortPosts";
+import { SortBar } from "@/components/SortBar";
 
 
 export const Route = createFileRoute("/feed")({
@@ -134,6 +136,7 @@ function FeedPage() {
   const [cat, setCat] = useState<Category>("sherbim");
   const [filter, setFilter] = useState<Category | "all">("all");
   const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [interestFor, setInterestFor] = useState<Post | null>(null);
@@ -480,6 +483,8 @@ function FeedPage() {
                 </span>
               )}
             </div>
+
+            <SortBar value={sortKey} onChange={setSortKey} resultCount={visible.length} />
 
             <div className="mt-3 space-y-4">
               {visible.map((p) => {
