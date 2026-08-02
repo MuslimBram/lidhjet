@@ -17,6 +17,10 @@ import {
   Tag,
   Search,
   Repeat2,
+  Star,
+  ShoppingBag,
+  MessageSquare,
+
 } from "lucide-react";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { UserBadge } from "@/components/UserBadge";
@@ -34,6 +38,8 @@ import { calcServiceTax, formatLek } from "@/lib/taxCalc";
 import { useViolations } from "@/hooks/useViolations";
 import { usePostLimit } from "@/hooks/usePostLimit";
 import { usePostNotifications } from "@/hooks/usePostNotifications";
+import { sortPosts, type SortKey } from "@/lib/sortPosts";
+import { SortBar } from "@/components/SortBar";
 
 
 export const Route = createFileRoute("/feed")({
@@ -59,11 +65,19 @@ interface Post {
   body: string;
   price: number;
   createdAt: string;
+  createdAtMs: number;
+  rating: number;
+  ratingCount: number;
+  sales: number;
   comments: CommentItem[];
   attachments?: string[];
   justification?: string;
 }
 
+
+
+const HOUR = 3_600_000;
+const NOW = Date.UTC(2026, 7, 2, 6, 0, 0);
 
 const SEED: Post[] = [
   {
@@ -73,6 +87,10 @@ const SEED: Post[] = [
     body: "Elektricist i licencuar. Instalime, riparime, kontrata mirëmbajtjeje.",
     price: 3500,
     createdAt: "2 orë më parë",
+    createdAtMs: NOW - 2 * HOUR,
+    rating: 4.8,
+    ratingCount: 41,
+    sales: 63,
     comments: [{ author: "Elira Kola", body: "A punoni edhe në zonën time?" }],
   },
   {
@@ -82,6 +100,10 @@ const SEED: Post[] = [
     body: "Shes olive extra virgin nga ferma familjare. 5L / 15L, certifikatë analize.",
     price: 12000,
     createdAt: "5 orë më parë",
+    createdAtMs: NOW - 5 * HOUR,
+    rating: 4.5,
+    ratingCount: 12,
+    sales: 128,
     comments: [],
   },
   {
@@ -91,9 +113,14 @@ const SEED: Post[] = [
     body: "Kërkoj punë part-time si përkthyese IT/EN (5+ vite eksperiencë). CV i verifikuar.",
     price: 45000,
     createdAt: "1 ditë më parë",
+    createdAtMs: NOW - 24 * HOUR,
+    rating: 5,
+    ratingCount: 3,
+    sales: 7,
     comments: [],
   },
 ];
+
 
 const CAT_META: Record<Category, { icon: typeof Briefcase; label: string; className: string }> = {
   pune: { icon: Briefcase, label: "Punë", className: "bg-primary/15 text-primary" },
@@ -113,6 +140,7 @@ function FeedPage() {
   const [cat, setCat] = useState<Category>("sherbim");
   const [filter, setFilter] = useState<Category | "all">("all");
   const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [interestFor, setInterestFor] = useState<Post | null>(null);
@@ -133,8 +161,13 @@ function FeedPage() {
               body: p.body,
               price: p.price,
               createdAt: "tani",
+              createdAtMs: Date.now(),
+              rating: 0,
+              ratingCount: 0,
+              sales: 0,
               comments: [],
             },
+
             ...prev,
           ],
     );
@@ -143,7 +176,7 @@ function FeedPage() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return posts.filter((p) => {
+    const matched = posts.filter((p) => {
       if (filter !== "all" && p.offerType !== filter) return false;
       if (!q) return true;
       return (
@@ -152,7 +185,9 @@ function FeedPage() {
         String(p.price).includes(q)
       );
     });
-  }, [posts, filter, query]);
+    return sortPosts(matched, sortKey);
+  }, [posts, filter, query, sortKey]);
+
 
   const suggestion = useMemo(() => suggestCategory(draft), [draft]);
 
@@ -166,6 +201,11 @@ function FeedPage() {
       body: draft,
       price,
       createdAt: "tani",
+      createdAtMs: Date.now(),
+      rating: 0,
+      ratingCount: 0,
+      sales: 0,
+
       comments: [],
       attachments: attachments.map((a) => a.file.name),
       justification,
@@ -448,6 +488,8 @@ function FeedPage() {
               )}
             </div>
 
+            <SortBar value={sortKey} onChange={setSortKey} resultCount={visible.length} />
+
             <div className="mt-3 space-y-4">
               {visible.map((p) => {
                 const M = CAT_META[p.offerType];
@@ -471,6 +513,17 @@ function FeedPage() {
                         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                           <Tag className="h-3.5 w-3.5" /> {formatLek(p.price)}
                         </span>
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                          <Star className="h-3.5 w-3.5 text-[color:var(--color-warning)]" />
+                          {p.ratingCount > 0 ? `${p.rating.toFixed(1)} (${p.ratingCount})` : "pa vlerësime"}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                          <ShoppingBag className="h-3.5 w-3.5" /> {p.sales} shitje
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                          <MessageSquare className="h-3.5 w-3.5" /> {p.comments.length}
+                        </span>
+
                       </div>
                       <button
                         onClick={() => setInterestFor(p)}
