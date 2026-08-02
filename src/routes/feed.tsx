@@ -192,6 +192,11 @@ function FeedPage() {
       body: draft,
       price,
       createdAt: "tani",
+      createdAtMs: Date.now(),
+      rating: 0,
+      ratingCount: 0,
+      sales: 0,
+
       comments: [],
       attachments: attachments.map((a) => a.file.name),
       justification,
