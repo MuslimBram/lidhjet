@@ -59,10 +59,15 @@ interface Post {
   body: string;
   price: number;
   createdAt: string;
+  createdAtMs: number;
+  rating: number;
+  ratingCount: number;
+  sales: number;
   comments: CommentItem[];
   attachments?: string[];
   justification?: string;
 }
+
 
 
 const SEED: Post[] = [
