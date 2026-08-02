@@ -1,6 +1,8 @@
 // Shared notification delivery respecting the user's chosen mode
 // (dridhje / beep / normal / heshtje) stored by NotificationSettings.
 
+import { logNotification } from "@/lib/users";
+
 export type NotificationMode = "vibrate" | "beep" | "normal" | "silent";
 
 export const NOTIF_MODE_KEY = "lidhjet_notif_mode";
@@ -33,6 +35,8 @@ export function playBeep() {
 export function notifyUser(title: string, body: string) {
   if (typeof window === "undefined") return;
   const mode = getNotificationMode();
+  const permission = "Notification" in window ? Notification.permission : "unsupported";
+  logNotification({ title, body, mode, permission });
   if (mode === "silent") return;
   if (mode === "vibrate") navigator.vibrate?.(200);
   if (mode === "beep") playBeep();
@@ -41,4 +45,17 @@ export function notifyUser(title: string, body: string) {
       new Notification(title, { body });
     } catch {}
   }
+}
+
+/** Kërkon lejen e njoftimeve — thirret pas regjistrimit/hyrjes. */
+export async function ensureNotificationPermission(): Promise<NotificationPermission | "unsupported"> {
+  if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+  if (Notification.permission === "default") {
+    try {
+      return await Notification.requestPermission();
+    } catch {
+      return Notification.permission;
+    }
+  }
+  return Notification.permission;
 }
