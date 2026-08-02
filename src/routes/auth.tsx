@@ -1,6 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { Mail, Smartphone, ShieldCheck, ArrowLeft, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Mail, Smartphone, ShieldCheck, ArrowLeft, Loader2, BellRing } from "lucide-react";
+import {
+  createChallenge,
+  getChallenge,
+  verifyCode,
+  canResend,
+  clearChallenge,
+  OTP_MAX_ATTEMPTS,
+  type OtpChallenge,
+} from "@/lib/otp";
+import { ensureNotificationPermission, notifyUser } from "@/lib/notify";
+import { registerUser, setCurrentUserByIdentifier, getUsers } from "@/lib/users";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
