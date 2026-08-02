@@ -154,8 +154,13 @@ function FeedPage() {
               body: p.body,
               price: p.price,
               createdAt: "tani",
+              createdAtMs: Date.now(),
+              rating: 0,
+              ratingCount: 0,
+              sales: 0,
               comments: [],
             },
+
             ...prev,
           ],
     );
