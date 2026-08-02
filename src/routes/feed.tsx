@@ -509,6 +509,17 @@ function FeedPage() {
                         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                           <Tag className="h-3.5 w-3.5" /> {formatLek(p.price)}
                         </span>
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                          <Star className="h-3.5 w-3.5 text-[color:var(--color-warning)]" />
+                          {p.ratingCount > 0 ? `${p.rating.toFixed(1)} (${p.ratingCount})` : "pa vlerësime"}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                          <ShoppingBag className="h-3.5 w-3.5" /> {p.sales} shitje
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                          <MessageSquare className="h-3.5 w-3.5" /> {p.comments.length}
+                        </span>
+
                       </div>
                       <button
                         onClick={() => setInterestFor(p)}
