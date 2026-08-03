@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { ShieldCheck, ArrowLeft, Check, X, Bot, AlertTriangle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ShieldCheck, ArrowLeft, Check, X, Bot, AlertTriangle, Lock } from "lucide-react";
+import { getRole, canSeeUserDetails, type Role } from "@/lib/roles";
+
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -65,10 +67,14 @@ function riskTone(r: number) {
 
 function AdminPage() {
   const [items, setItems] = useState<Pending[]>(SEED);
+  const [role, setRoleState] = useState<Role>("user");
+  useEffect(() => setRoleState(getRole()), []);
+  const canSeeDetails = canSeeUserDetails(role);
 
   function decide(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
+
 
   return (
     <div className="min-h-screen">
@@ -97,6 +103,16 @@ function AdminPage() {
           </div>
         </div>
 
+        {!canSeeDetails && (
+          <div className="mt-6 flex items-start gap-2 rounded-md bg-[color:var(--color-warning)]/10 p-3 text-xs text-[color:var(--color-warning)]">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Detajet e të regjistruarve (email, telefon, oferta) shfaqen vetëm për Owner dhe Admin.
+              Ju shihni vetëm emrin dhe mbiemrin.
+            </span>
+          </div>
+        )}
+
         <div className="mt-6 space-y-4">
           {items.map((u) => (
             <div key={u.id} className="card-elevated p-5">
@@ -111,16 +127,28 @@ function AdminPage() {
                     </span>
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    {u.contact} · {u.offer} · {u.createdHoursAgo}h më parë
+                    {canSeeDetails ? (
+                      <>
+                        {u.contact} · {u.offer} · {u.createdHoursAgo}h më parë
+                      </>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        <Lock className="h-3 w-3" /> Detajet e kontaktit të fshehura
+                      </span>
+                    )}
                   </div>
-                  <ul className="mt-3 space-y-1 text-sm">
-                    {u.aiNotes.map((n, i) => (
-                      <li key={i} className="flex items-start gap-2 text-muted-foreground">
-                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span>{n}</span>
-                      </li>
-                    ))}
-                  </ul>
+
+                  {canSeeDetails && (
+                    <ul className="mt-3 space-y-1 text-sm">
+                      {u.aiNotes.map((n, i) => (
+                        <li key={i} className="flex items-start gap-2 text-muted-foreground">
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span>{n}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <button
