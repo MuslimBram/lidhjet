@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Send, MessageCircle } from "lucide-react";
+import { detectContact } from "@/lib/contactDetect";
 
 export interface CommentItem {
   author: string;
@@ -11,9 +12,11 @@ const LIMIT = 2;
 export function CommentSection({
   initial,
   currentUserName = "Ju (demo)",
+  onViolation,
 }: {
   initial: CommentItem[];
   currentUserName?: string;
+  onViolation?: (reason: string) => { count: number; max: number; suspended: boolean } | void;
 }) {
   const [items, setItems] = useState<CommentItem[]>(initial);
   const [draft, setDraft] = useState("");
@@ -29,6 +32,19 @@ export function CommentSection({
       return;
     }
     if (!draft.trim()) return;
+    const hits = detectContact(draft);
+    if (hits.length > 0) {
+      const reason = `Komenti përmban informacion kontakti (${hits
+        .map((h) => h.label)
+        .join(", ")}). Kontakti shkëmbehet vetëm brenda bisedës pas interesit.`;
+      const res = onViolation?.(reason);
+      setError(
+        res
+          ? `${reason} Shkelje: ${res.count}/${res.max}${res.suspended ? " — llogaria u pezullua për 7 ditë." : ""}`
+          : reason,
+      );
+      return;
+    }
     setItems([...items, { author: currentUserName, body: draft.trim() }]);
     setDraft("");
   }

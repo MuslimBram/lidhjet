@@ -146,6 +146,7 @@ function FeedPage() {
   const [interestFor, setInterestFor] = useState<Post | null>(null);
   const [attachments, setAttachments] = useState<ScanResult[]>([]);
   const [justifyFor, setJustifyFor] = useState<{ price: number; reason: string } | null>(null);
+  const [myRatings, setMyRatings] = useState<Record<string, number>>({});
 
   const { count, max, isSuspended, suspendedUntil, addViolation, reset } = useViolations();
   const { canPost, remainingLabel, markPosted } = usePostLimit();
@@ -285,6 +286,22 @@ function FeedPage() {
     }
 
     publish(price);
+  }
+
+  function ratePost(id: string, value: number) {
+    if (myRatings[id]) return;
+    setMyRatings((m) => ({ ...m, [id]: value }));
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              ratingCount: p.ratingCount + 1,
+              rating: (p.rating * p.ratingCount + value) / (p.ratingCount + 1),
+            }
+          : p,
+      ),
+    );
   }
 
 
@@ -532,7 +549,34 @@ function FeedPage() {
                         <HandCoins className="h-3.5 w-3.5" /> Shpreh interes
                       </button>
                     </div>
-                    <CommentSection initial={p.comments} />
+                    <div className="mt-3 flex items-center gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                      <span>Vlerëso:</span>
+                      {[1, 2, 3, 4, 5].map((v) => (
+                        <button
+                          key={v}
+                          onClick={() => ratePost(p.id, v)}
+                          disabled={!!myRatings[p.id]}
+                          aria-label={`Vlerëso ${v} yje`}
+                          className="disabled:cursor-not-allowed"
+                        >
+                          <Star
+                            className={`h-4 w-4 ${
+                              v <= (myRatings[p.id] ?? 0)
+                                ? "fill-[color:var(--color-warning)] text-[color:var(--color-warning)]"
+                                : "text-muted-foreground hover:text-[color:var(--color-warning)]"
+                            }`}
+                          />
+                        </button>
+                      ))}
+                      {myRatings[p.id] && <span>Faleminderit — vlerësimi u regjistrua.</span>}
+                    </div>
+                    <CommentSection
+                      initial={p.comments}
+                      onViolation={(reason) => {
+                        const { count, suspendedUntil } = addViolation("contact", reason);
+                        return { count, max, suspended: !!suspendedUntil };
+                      }}
+                    />
                   </article>
                 );
               })}
