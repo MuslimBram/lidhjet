@@ -138,14 +138,17 @@ function AdminPage() {
                     )}
                   </div>
 
-                  <ul className="mt-3 space-y-1 text-sm">
-                    {u.aiNotes.map((n, i) => (
-                      <li key={i} className="flex items-start gap-2 text-muted-foreground">
-                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span>{n}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  {canSeeDetails && (
+                    <ul className="mt-3 space-y-1 text-sm">
+                      {u.aiNotes.map((n, i) => (
+                        <li key={i} className="flex items-start gap-2 text-muted-foreground">
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span>{n}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <button
