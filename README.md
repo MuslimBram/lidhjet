@@ -57,3 +57,19 @@ Kur kërkohet një produkt/shërbim, rezultatet renditen sipas kritereve reale (
 - **Çmimi** i ulët → i lartë dhe i lartë → i ulët
 
 Çdo postim shfaq tani vlerësimin, numrin e vlerësimeve, shitjet dhe komentet. Filtrat punojnë të kombinuar me lupën e kërkimit dhe kategoritë.
+
+## Faza 3.6 — përfundimi i pjesës frontend (end-to-end)
+
+- **Kontroll kontakti në komente**: `CommentSection` skanon tekstin me `contactDetect`; komenti bllokohet dhe shkelja regjistrohet (3 → pezullim 7 ditë), përveç limitit 2 komente/postim.
+- **Vlerësime reale**: çdo postim mund të vlerësohet 1–5 yje një herë; mesatarja dhe numri i vlerësimeve përditësohen dhe ndikojnë renditjen Bayesian.
+- **Rolet**: `/admin` ka zgjedhësin e rolit (Përdorues / Admin / Owner). Detajet e të regjistruarve shfaqen vetëm për Owner/Admin.
+- **Regjistri real i të regjistruarve** dhe **logu i dorëzimit të njoftimeve** shfaqen në `/admin` (verifikim se çdo i regjistruar me njoftime aktive marrë njoftim për çdo postim).
+
+### Mbetet (kërkon Lovable Cloud — kreditet)
+
+1. Auth real OTP me SMS/email (2FA aktualisht kod real i verifikuar në pajisje).
+2. Baza e të dhënave me RLS: `profiles`, `posts`, `comments`, `attachments`, `violations`, `user_roles` — rolet reale në server, jo lokale.
+3. Storage për bashkëngjitjet + skanim i thelluar AI (Gemini Vision për kontakt në foto, antivirus).
+4. Çmim "brenda normave" nga mesatarja reale e postimeve të miratuara + kategorizim AI në server.
+5. Verifikim numri/emaili me TrueCaller / CallApp / rrjete sociale dhe rrjedha e 24 orëve me njoftim AI.
+6. Email pezullimi/riaktivizimi dhe pagesa reale e taksës së shërbimit.
