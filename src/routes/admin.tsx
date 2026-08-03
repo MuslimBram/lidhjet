@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ShieldCheck, ArrowLeft, Check, X, Bot, AlertTriangle, Lock } from "lucide-react";
-import { getRole, canSeeUserDetails, type Role } from "@/lib/roles";
+import { ShieldCheck, ArrowLeft, Check, X, Bot, AlertTriangle, Lock, Bell, Users } from "lucide-react";
+import { getRole, setRole, canSeeUserDetails, type Role } from "@/lib/roles";
+import { getUsers, getNotifLog, type RegisteredUser, type NotifLogEntry } from "@/lib/users";
 
 
 export const Route = createFileRoute("/admin")({
@@ -68,7 +69,18 @@ function riskTone(r: number) {
 function AdminPage() {
   const [items, setItems] = useState<Pending[]>(SEED);
   const [role, setRoleState] = useState<Role>("user");
-  useEffect(() => setRoleState(getRole()), []);
+  const [users, setUsers] = useState<RegisteredUser[]>([]);
+  const [log, setLog] = useState<NotifLogEntry[]>([]);
+  useEffect(() => {
+    setRoleState(getRole());
+    setUsers(getUsers());
+    setLog(getNotifLog());
+  }, []);
+
+  function changeRole(next: Role) {
+    setRole(next);
+    setRoleState(next);
+  }
   const canSeeDetails = canSeeUserDetails(role);
 
   function decide(id: string) {
@@ -89,7 +101,16 @@ function AdminPage() {
             </span>
             Lidhjet · Admin
           </Link>
-          <span className="w-16" />
+          <select
+            value={role}
+            onChange={(e) => changeRole(e.target.value as Role)}
+            aria-label="Roli aktual"
+            className="rounded-md border border-border bg-input px-2 py-1.5 text-xs"
+          >
+            <option value="user">Përdorues</option>
+            <option value="admin">Admin</option>
+            <option value="owner">Owner</option>
+          </select>
         </div>
       </header>
 
@@ -174,6 +195,61 @@ function AdminPage() {
             </div>
           )}
         </div>
+
+        <section className="mt-10">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Users className="h-4 w-4 text-primary" /> Të regjistruar ({users.length})
+          </h2>
+          <div className="card-elevated mt-3 divide-y divide-border/60">
+            {users.length === 0 && (
+              <p className="p-5 text-sm text-muted-foreground">
+                Asnjë regjistrim i ruajtur në këtë pajisje.
+              </p>
+            )}
+            {users.map((u) => (
+              <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
+                <span className="font-medium">{u.fullName}</span>
+                {canSeeDetails ? (
+                  <span className="text-xs text-muted-foreground">
+                    {u.identifier} · {u.method === "email" ? "email" : "telefon"} · {u.offerType} ·{" "}
+                    {new Date(u.registeredAt).toLocaleString("sq-AL")} ·{" "}
+                    {u.notificationsEnabled ? "njoftime aktive" : "njoftime jo aktive"}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <Lock className="h-3 w-3" /> Detajet e fshehura
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Bell className="h-4 w-4 text-primary" /> Dorëzimi i njoftimeve ({log.length})
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Verifikim se çdo i regjistruar me njoftime aktive marrë njoftim për çdo postim.
+          </p>
+          <div className="card-elevated mt-3 divide-y divide-border/60">
+            {log.length === 0 && (
+              <p className="p-5 text-sm text-muted-foreground">Asnjë njoftim i regjistruar.</p>
+            )}
+            {log.map((e, i) => (
+              <div key={i} className="p-4 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{e.title}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(e.at).toLocaleString("sq-AL")} · {e.recipients} marrës · {e.mode} ·
+                    leje: {e.permission}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{e.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       </main>
     </div>
   );
