@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { ShieldCheck, ArrowLeft, Check, X, Bot, AlertTriangle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ShieldCheck, ArrowLeft, Check, X, Bot, AlertTriangle, Lock } from "lucide-react";
+import { getRole, canSeeUserDetails, type Role } from "@/lib/roles";
+
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -65,10 +67,14 @@ function riskTone(r: number) {
 
 function AdminPage() {
   const [items, setItems] = useState<Pending[]>(SEED);
+  const [role, setRoleState] = useState<Role>("user");
+  useEffect(() => setRoleState(getRole()), []);
+  const canSeeDetails = canSeeUserDetails(role);
 
   function decide(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
+
 
   return (
     <div className="min-h-screen">
