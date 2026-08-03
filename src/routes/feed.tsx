@@ -146,6 +146,7 @@ function FeedPage() {
   const [interestFor, setInterestFor] = useState<Post | null>(null);
   const [attachments, setAttachments] = useState<ScanResult[]>([]);
   const [justifyFor, setJustifyFor] = useState<{ price: number; reason: string } | null>(null);
+  const [myRatings, setMyRatings] = useState<Record<string, number>>({});
 
   const { count, max, isSuspended, suspendedUntil, addViolation, reset } = useViolations();
   const { canPost, remainingLabel, markPosted } = usePostLimit();
