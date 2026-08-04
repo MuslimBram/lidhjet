@@ -1,17 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Mail, Smartphone, ShieldCheck, ArrowLeft, Loader2, BellRing } from "lucide-react";
-import {
-  createChallenge,
-  getChallenge,
-  verifyCode,
-  canResend,
-  clearChallenge,
-  OTP_MAX_ATTEMPTS,
-  type OtpChallenge,
-} from "@/lib/otp";
+import { supabase } from "@/integrations/supabase/client";
 import { ensureNotificationPermission, notifyUser } from "@/lib/notify";
-import { registerUser, setCurrentUserByIdentifier, getUsers } from "@/lib/users";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -20,13 +11,12 @@ export const Route = createFileRoute("/auth")({
       {
         name: "description",
         content:
-          "Regjistrohu me email ose telefon. Verifikim me 2FA dhe kontroll AI për siguri maksimale.",
+          "Regjistrohu me email ose telefon. Verifikim me 2FA real dhe kontroll AI për siguri maksimale.",
       },
       { property: "og:title", content: "Regjistrim & Hyrje — Lidhjet" },
-      {
-        property: "og:description",
-        content: "Regjistrohu me email ose telefon dhe 2FA.",
-      },
+      { property: "og:description", content: "Regjistrohu me email ose telefon dhe 2FA real." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AuthPage,
@@ -36,12 +26,15 @@ type Method = "email" | "phone";
 type Mode = "register" | "login";
 type Step = "identify" | "otp" | "profile" | "done";
 
+const RESEND_MS = 45_000;
+
 function validateFullName(name: string) {
   const parts = name.trim().split(/\s+/);
   return parts.length >= 2 && parts.every((p) => p.length >= 2 && /^[\p{L}'’-]+$/u.test(p));
 }
 
 function AuthPage() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("register");
   const [method, setMethod] = useState<Method>("email");
   const [step, setStep] = useState<Step>("identify");
@@ -55,7 +48,7 @@ function AuthPage() {
   const [showClarify, setShowClarify] = useState(false);
   const [tempName, setTempName] = useState("");
   const [tempError, setTempError] = useState<string | null>(null);
-  const [challenge, setChallenge] = useState<OtpChallenge | null>(null);
+  const [sentAt, setSentAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [notifState, setNotifState] = useState<string>("");
 
@@ -69,53 +62,77 @@ function AuthPage() {
     setStep("identify");
     setError(null);
     setOtp("");
-    clearChallenge();
-    setChallenge(null);
+    setSentAt(null);
   }
 
-  function sendCode() {
-    const c = createChallenge(identifier.trim(), mode === "login" ? "login" : "register");
-    setChallenge(c);
+  async function sendCode() {
+    const id = identifier.trim();
+    const shouldCreateUser = mode === "register";
+    const { error: err } =
+      method === "email"
+        ? await supabase.auth.signInWithOtp({ email: id, options: { shouldCreateUser } })
+        : await supabase.auth.signInWithOtp({ phone: id, options: { shouldCreateUser } });
+    if (err) {
+      setError(translateAuthError(err.message, mode, method));
+      return false;
+    }
+    setSentAt(Date.now());
     setOtp("");
-    // Pa backend email/SMS, kodi dorëzohet në pajisje (njoftim + panel).
-    notifyUser("Kodi 2FA — Lidhjet", `Kodi juaj: ${c.code} (skadon pas 5 minutash)`);
-    return c;
+    return true;
   }
 
-  function next() {
+  async function next() {
     setError(null);
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
       if (step === "identify") {
-        if (!identifier.trim()) return setError("Plotësoni fushën.");
-        if (mode === "login" && !getUsers().some((u) => u.identifier === identifier.trim())) {
-          return setError("Nuk ka llogari me këtë email/numër. Regjistrohu më parë.");
+        if (!identifier.trim()) {
+          setError("Plotësoni fushën.");
+          return;
         }
-        sendCode();
-        setStep("otp");
+        if (method === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(identifier.trim())) {
+          setError("Adresa e email-it nuk është e vlefshme.");
+          return;
+        }
+        if (method === "phone" && !/^\+[1-9]\d{7,14}$/.test(identifier.trim())) {
+          setError("Numri duhet në format ndërkombëtar, p.sh. +355691234567.");
+          return;
+        }
+        if (await sendCode()) setStep("otp");
       } else if (step === "otp") {
-        if (otp.length < 6) return setError("Kodi duhet të ketë 6 shifra.");
-        const res = verifyCode(otp);
-        if (!res.ok) {
-          setChallenge(getChallenge());
-          setOtp("");
-          if (res.reason === "mismatch")
-            return setError(`Kodi është i pasaktë. Tentativa të mbetura: ${res.left}.`);
-          if (res.reason === "expired") return setError("Kodi skadoi. Dërgo një kod të re.");
-          if (res.reason === "locked")
-            return setError(
-              `U tejkaluan ${OTP_MAX_ATTEMPTS} tentativa. Dërgo një kod të re për të vazhduar.`,
-            );
-          return setError("Nuk ka kod aktiv. Dërgo një kod të re.");
+        if (otp.length < 6) {
+          setError("Kodi duhet të ketë 6 shifra.");
+          return;
         }
-        setChallenge(null);
+        const id = identifier.trim();
+        const { data, error: err } =
+          method === "email"
+            ? await supabase.auth.verifyOtp({ email: id, token: otp, type: "email" })
+            : await supabase.auth.verifyOtp({ phone: id, token: otp, type: "sms" });
+        if (err || !data.session) {
+          setOtp("");
+          setError(
+            /expired/i.test(err?.message ?? "")
+              ? "Kodi skadoi. Dërgo një kod të re."
+              : "Kodi është i pasaktë ose i skaduar. Provo përsëri.",
+          );
+          return;
+        }
+        const perm = await ensureNotificationPermission();
+        setNotifState(String(perm));
         if (mode === "login") {
-          const u = setCurrentUserByIdentifier(identifier.trim());
-          if (u) void ensureNotificationPermission().then((p) => setNotifState(String(p)));
           setStep("done");
         } else {
-          setStep("profile");
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", data.session.user.id)
+            .maybeSingle();
+          if (prof?.full_name) {
+            setStep("done");
+          } else {
+            setStep("profile");
+          }
         }
       } else if (step === "profile") {
         if (!validateFullName(fullName)) {
@@ -124,23 +141,38 @@ function AuthPage() {
           setShowClarify(true);
           return;
         }
-        completeRegistration(fullName.trim().replace(/\s+/g, " "));
+        await completeRegistration(fullName.trim().replace(/\s+/g, " "));
       }
-    }, 400);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function completeRegistration(name: string) {
-    registerUser({
-      identifier: identifier.trim(),
-      method,
-      fullName: name,
-      offerType,
-    });
-    void ensureNotificationPermission().then((p) => setNotifState(String(p)));
+  async function completeRegistration(name: string) {
+    const { data: userData } = await supabase.auth.getUser();
+    const uid = userData.user?.id;
+    if (!uid) {
+      setError("Sesioni mungon. Verifiko përsëri kodin 2FA.");
+      setStep("identify");
+      return;
+    }
+    const { error: err } = await supabase
+      .from("profiles")
+      .update({
+        full_name: name,
+        offer_type: offerType,
+        ai_notes: offerDetails.trim() || null,
+      })
+      .eq("id", uid);
+    if (err) {
+      setError("Profili nuk u ruajt: " + err.message);
+      return;
+    }
+    notifyUser("Lidhjet", "Profili u dërgua për verifikim 24-orësh.");
     setStep("done");
   }
 
-  function saveClarified() {
+  async function saveClarified() {
     if (!validateFullName(tempName)) {
       setTempError("Ju lutemi vendosni Emrin dhe Mbiemrin e plotë (pa iniciale, numra ose simbole).");
       return;
@@ -148,13 +180,15 @@ function AuthPage() {
     const clean = tempName.trim().replace(/\s+/g, " ");
     setFullName(clean);
     setShowClarify(false);
-    completeRegistration(clean);
+    setLoading(true);
+    try {
+      await completeRegistration(clean);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const resendIn = challenge
-    ? Math.max(0, Math.ceil((challenge.createdAt + 30_000 - now) / 1000))
-    : 0;
-  const expiresIn = challenge ? Math.max(0, Math.ceil((challenge.expiresAt - now) / 1000)) : 0;
+  const resendIn = sentAt ? Math.max(0, Math.ceil((sentAt + RESEND_MS - now) / 1000)) : 0;
 
   return (
     <div className="min-h-screen">
@@ -181,11 +215,10 @@ function AuthPage() {
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {mode === "register"
-                ? "Verifikim 2FA i menjëhershëm + kontroll AI për email/numra të përkohshëm."
-                : "Fut email-in ose numrin dhe kodin 2FA për të hyrë."}
+                ? "Kodi 2FA dërgohet realisht në email/telefon. Kontroll AI për email/numra të përkohshëm."
+                : "Fut email-in ose numrin; kodi 2FA vjen në të."}
             </p>
 
-            {/* Mode toggle: Regjistrohu / Hyr */}
             <div className="mt-5 grid grid-cols-2 gap-2 rounded-lg bg-input p-1">
               <button
                 onClick={() => switchMode("register")}
@@ -209,7 +242,6 @@ function AuthPage() {
               </button>
             </div>
 
-            {/* Stepper */}
             <ol className="mt-6 flex items-center gap-2 text-xs">
               {((mode === "register"
                 ? ["identify", "otp", "profile"]
@@ -267,11 +299,12 @@ function AuthPage() {
                     type={method === "email" ? "email" : "tel"}
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder={method === "email" ? "ju@example.com" : "+355 6X XXX XXXX"}
+                    placeholder={method === "email" ? "ju@example.com" : "+355691234567"}
                     className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none ring-primary/40 focus:ring-2"
                   />
                   <p className="mt-2 text-xs text-muted-foreground">
-                    AI kontrollon nëse është email/numër i përkohshëm.
+                    Kodi 2FA dërgohet nga backend-i; AI kontrollon nëse është email/numër i
+                    përkohshëm.
                   </p>
                 </>
               )}
@@ -286,39 +319,28 @@ function AuthPage() {
                     placeholder="——————"
                     className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 text-center text-lg tracking-[0.5em] outline-none ring-primary/40 focus:ring-2"
                   />
-                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                     <span>
-                      Kodi u dërgua për <span className="text-foreground">{identifier}</span>
-                      {expiresIn > 0 && <> · skadon pas {Math.floor(expiresIn / 60)}:{String(expiresIn % 60).padStart(2, "0")}</>}
+                      Kodi u dërgua në <span className="text-foreground">{identifier}</span>
                     </span>
                     <button
                       onClick={() => {
-                        if (!canResend(challenge)) return;
-                        sendCode();
+                        if (resendIn > 0) return;
                         setError(null);
+                        void sendCode();
                       }}
                       disabled={resendIn > 0}
-                      className="rounded-md border border-border px-2 py-1 text-xs hover:text-foreground disabled:opacity-50"
+                      className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:text-foreground disabled:opacity-50"
                     >
                       {resendIn > 0 ? `Ridërgo (${resendIn}s)` : "Ridërgo kodin"}
                     </button>
                   </div>
-
-                  {challenge && (
-                    <div className="mt-3 rounded-md border border-primary/40 bg-primary/10 p-3">
-                      <p className="flex items-center gap-2 text-xs font-medium text-primary">
-                        <BellRing className="h-3.5 w-3.5" /> Kodi i dorëzuar në këtë pajisje
-                      </p>
-                      <p className="mt-1 font-mono text-2xl tracking-[0.3em] text-foreground">
-                        {challenge.code}
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        Kodi është i rastësishëm dhe verifikohet me përputhje të saktë. Dërgimi me
-                        SMS/email aktivizohet kur ndizet backend-i — deri atëherë dorëzohet vetëm
-                        në pajisje.
-                      </p>
-                    </div>
-                  )}
+                  <p className="mt-3 rounded-md border border-primary/30 bg-primary/10 p-3 text-[11px] text-muted-foreground">
+                    Kodi krijohet dhe verifikohet nga serveri —{" "}
+                    <span className="text-foreground">shifra të rastësishme nuk pranohen</span>.
+                    Kontrollo{" "}
+                    {method === "email" ? "kutinë e email-it (edhe spam)" : "SMS-in në telefon"}.
+                  </p>
                 </>
               )}
 
@@ -365,7 +387,7 @@ function AuthPage() {
               )}
 
               <button
-                onClick={next}
+                onClick={() => void next()}
                 disabled={loading}
                 className="mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
               >
@@ -392,7 +414,7 @@ function AuthPage() {
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {mode === "login"
-                ? "2FA u verifikua. Mund të kaloni në feed."
+                ? "2FA u verifikua nga serveri. Mund të kaloni në feed."
                 : "AI po analizon emrin, email-in dhe të dhënat. Pas 24 orësh do të kërkohet 2FA përfundimtar përpara aktivizimit."}
             </p>
             <div className="mt-4 rounded-md border border-border bg-input/50 p-3 text-left text-xs text-muted-foreground">
@@ -401,7 +423,6 @@ function AuthPage() {
               </p>
               <p className="mt-1">
                 Leja e njoftimeve: <span className="text-foreground">{notifState || "në pritje"}</span>
-                {" · "}Marrës të regjistruar: <span className="text-foreground">{getUsers().length}</span>
               </p>
               <button
                 onClick={() => notifyUser("Test njoftimi — Lidhjet", "Njoftimet punojnë siç duhet.")}
@@ -410,19 +431,14 @@ function AuthPage() {
                 Testo njoftimin
               </button>
             </div>
-            <Link
-              to="/feed"
+            <button
+              onClick={() => void navigate({ to: "/feed" })}
               className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
-              {mode === "login" ? "Vazhdo në feed" : "Shiko feed-in publik"}
-            </Link>
+              Vazhdo në feed
+            </button>
           </div>
         )}
-
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Backend (Lovable Cloud) është i pa aktivizuar — ky demo tregon flow-n; verifikimi real
-          aktivizohet me kredite.
-        </p>
       </main>
 
       {showClarify && (
@@ -452,7 +468,7 @@ function AuthPage() {
                 Anulo
               </button>
               <button
-                onClick={saveClarified}
+                onClick={() => void saveClarified()}
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
                 Ruaj dhe vazhdo
@@ -463,4 +479,19 @@ function AuthPage() {
       )}
     </div>
   );
+}
+
+function translateAuthError(msg: string, mode: Mode, method: Method): string {
+  if (/signups not allowed|Signups not allowed for otp/i.test(msg)) {
+    return mode === "login"
+      ? "Nuk ka llogari me këtë email/numër. Regjistrohu më parë."
+      : "Regjistrimi është i çaktivizuar.";
+  }
+  if (/rate limit|too many/i.test(msg)) {
+    return "Shumë tentativa. Prit disa minuta përpara se të kërkosh kod të re.";
+  }
+  if (/phone provider|sms|unsupported phone/i.test(msg) && method === "phone") {
+    return "Dërgimi me SMS nuk është konfiguruar ende. Përdor Email për 2FA (ose konfiguro SMS-in në Cloud → Users → Auth Settings → Phone).";
+  }
+  return msg;
 }
