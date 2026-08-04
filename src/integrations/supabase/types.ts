@@ -271,27 +271,7 @@ export type Database = {
       }
     }
     Views: {
-      public_profiles: {
-        Row: {
-          created_at: string | null
-          full_name: string | null
-          id: string | null
-          offer_type: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          full_name?: string | null
-          id?: string | null
-          offer_type?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          full_name?: string | null
-          id?: string | null
-          offer_type?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       has_role: {
@@ -302,6 +282,15 @@ export type Database = {
         Returns: boolean
       }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      list_public_profiles: {
+        Args: never
+        Returns: {
+          created_at: string
+          full_name: string
+          id: string
+          offer_type: string
+        }[]
+      }
     }
     Enums: {
       app_role: "owner" | "admin" | "user"
