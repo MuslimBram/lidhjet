@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import {
   ShieldCheck,
   Send,
@@ -20,27 +22,26 @@ import {
   Star,
   ShoppingBag,
   MessageSquare,
-
+  Loader2,
+  Paperclip,
 } from "lucide-react";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { UserBadge } from "@/components/UserBadge";
-import { CommentSection, type CommentItem } from "@/components/CommentSection";
+import { CommentSection } from "@/components/CommentSection";
 import { SuspensionBanner } from "@/components/SuspensionBanner";
 import { InterestDialog } from "@/components/InterestDialog";
 import { AttachmentPicker } from "@/components/AttachmentPicker";
 import { PriceJustifyDialog } from "@/components/PriceJustifyDialog";
 import { detectContact } from "@/lib/contactDetect";
-import { jaccard, DUPLICATE_THRESHOLD } from "@/lib/similarity";
 import { checkPrice } from "@/lib/priceCheck";
 import { suggestCategory } from "@/lib/autoCategory";
 import type { ScanResult } from "@/lib/fileScan";
 import { calcServiceTax, formatLek } from "@/lib/taxCalc";
-import { useViolations } from "@/hooks/useViolations";
-import { usePostLimit } from "@/hooks/usePostLimit";
-import { usePostNotifications } from "@/hooks/usePostNotifications";
 import { sortPosts, type SortKey } from "@/lib/sortPosts";
 import { SortBar } from "@/components/SortBar";
-
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { getFeed, createPost, addComment, ratePost, type Category, type FeedPost } from "@/lib/feed.functions";
 
 export const Route = createFileRoute("/feed")({
   head: () => ({
@@ -52,75 +53,12 @@ export const Route = createFileRoute("/feed")({
       },
       { property: "og:title", content: "Feed — Lidhjet" },
       { property: "og:description", content: "Postime nga anëtarë të verifikuar." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: FeedPage,
 });
-
-type Category = "pune" | "sherbim" | "tregti" | "tjeter";
-interface Post {
-  id: string;
-  authorFullName: string;
-  offerType: Category;
-  body: string;
-  price: number;
-  createdAt: string;
-  createdAtMs: number;
-  rating: number;
-  ratingCount: number;
-  sales: number;
-  comments: CommentItem[];
-  attachments?: string[];
-  justification?: string;
-}
-
-
-
-const HOUR = 3_600_000;
-const NOW = Date.UTC(2026, 7, 2, 6, 0, 0);
-
-const SEED: Post[] = [
-  {
-    id: "1",
-    authorFullName: "Arben Hoxha",
-    offerType: "sherbim",
-    body: "Elektricist i licencuar. Instalime, riparime, kontrata mirëmbajtjeje.",
-    price: 3500,
-    createdAt: "2 orë më parë",
-    createdAtMs: NOW - 2 * HOUR,
-    rating: 4.8,
-    ratingCount: 41,
-    sales: 63,
-    comments: [{ author: "Elira Kola", body: "A punoni edhe në zonën time?" }],
-  },
-  {
-    id: "2",
-    authorFullName: "Ilir Deda",
-    offerType: "tregti",
-    body: "Shes olive extra virgin nga ferma familjare. 5L / 15L, certifikatë analize.",
-    price: 12000,
-    createdAt: "5 orë më parë",
-    createdAtMs: NOW - 5 * HOUR,
-    rating: 4.5,
-    ratingCount: 12,
-    sales: 128,
-    comments: [],
-  },
-  {
-    id: "3",
-    authorFullName: "Ariana Meta",
-    offerType: "pune",
-    body: "Kërkoj punë part-time si përkthyese IT/EN (5+ vite eksperiencë). CV i verifikuar.",
-    price: 45000,
-    createdAt: "1 ditë më parë",
-    createdAtMs: NOW - 24 * HOUR,
-    rating: 5,
-    ratingCount: 3,
-    sales: 7,
-    comments: [],
-  },
-];
-
 
 const CAT_META: Record<Category, { icon: typeof Briefcase; label: string; className: string }> = {
   pune: { icon: Briefcase, label: "Punë", className: "bg-primary/15 text-primary" },
@@ -133,8 +71,30 @@ const CAT_META: Record<Category, { icon: typeof Briefcase; label: string; classN
   tjeter: { icon: MoreHorizontal, label: "Tjetër", className: "bg-muted text-muted-foreground" },
 };
 
+function relative(ms: number): string {
+  const diff = Date.now() - ms;
+  const h = Math.floor(diff / 3_600_000);
+  if (h < 1) return "tani";
+  if (h < 24) return `${h} orë më parë`;
+  const d = Math.floor(h / 24);
+  return `${d} ditë më parë`;
+}
+
 function FeedPage() {
-  const [posts, setPosts] = useState<Post[]>(SEED);
+  const { session, loading: authLoading } = useAuth();
+  const qc = useQueryClient();
+
+  const fetchFeed = useServerFn(getFeed);
+  const doCreate = useServerFn(createPost);
+  const doComment = useServerFn(addComment);
+  const doRate = useServerFn(ratePost);
+
+  const feedQuery = useQuery({
+    queryKey: ["feed"],
+    queryFn: () => fetchFeed(),
+    enabled: !!session,
+  });
+
   const [draft, setDraft] = useState("");
   const [priceStr, setPriceStr] = useState("");
   const [cat, setCat] = useState<Category>("sherbim");
@@ -143,37 +103,76 @@ function FeedPage() {
   const [sortKey, setSortKey] = useState<SortKey>("recent");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [interestFor, setInterestFor] = useState<Post | null>(null);
+  const [interestFor, setInterestFor] = useState<FeedPost | null>(null);
   const [attachments, setAttachments] = useState<ScanResult[]>([]);
   const [justifyFor, setJustifyFor] = useState<{ price: number; reason: string } | null>(null);
-  const [myRatings, setMyRatings] = useState<Record<string, number>>({});
+  const [uploading, setUploading] = useState(false);
 
-  const { count, max, isSuspended, suspendedUntil, addViolation, reset } = useViolations();
-  const { canPost, remainingLabel, markPosted } = usePostLimit();
-  const { announce } = usePostNotifications((p) => {
-    setPosts((prev) =>
-      prev.some((x) => x.id === p.id)
-        ? prev
-        : [
-            {
-              id: p.id,
-              authorFullName: p.authorFullName,
-              offerType: (p.offerType as Category) ?? "tjeter",
-              body: p.body,
-              price: p.price,
-              createdAt: "tani",
-              createdAtMs: Date.now(),
-              rating: 0,
-              ratingCount: 0,
-              sales: 0,
-              comments: [],
-            },
+  const posts = feedQuery.data?.posts ?? [];
+  const me = feedQuery.data?.me;
+  const isSuspended = !!me?.suspendedUntil && new Date(me.suspendedUntil).getTime() > Date.now();
 
-            ...prev,
-          ],
-    );
+  const publishMutation = useMutation({
+    mutationFn: async (vars: { price: number; justification?: string }) => {
+      setUploading(true);
+      try {
+        const files: {
+          name: string;
+          path: string;
+          mime: string;
+          size: number;
+          verdict: string;
+          notes?: string;
+        }[] = [];
+        for (const a of attachments) {
+          const path = `${session!.user.id}/${crypto.randomUUID()}-${a.file.name}`;
+          const up = await supabase.storage.from("attachments").upload(path, a.file);
+          if (up.error) throw new Error(`Ngarkimi i "${a.file.name}" dështoi: ${up.error.message}`);
+          files.push({
+            name: a.file.name,
+            path,
+            mime: a.file.type,
+            size: a.file.size,
+            verdict: a.verdict,
+            notes: a.reasons.join("; "),
+          });
+        }
+        return await doCreate({
+          data: {
+            body: draft,
+            category: cat,
+            price: vars.price,
+            justification: vars.justification,
+            files,
+          },
+        });
+      } finally {
+        setUploading(false);
+      }
+    },
+    onSuccess: (res) => {
+      setDraft("");
+      setPriceStr("");
+      setAttachments([]);
+      setError(null);
+      setNotice(
+        [
+          "Postimi u publikua. Të gjithë anëtarët me njoftime aktive u njoftuan.",
+          res.removedDuplicates > 0
+            ? `${res.removedDuplicates} postim i mëparshëm i ngjashëm u fshi automatikisht nga AI.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+      void qc.invalidateQueries({ queryKey: ["feed"] });
+    },
+    onError: (e) => {
+      setNotice(null);
+      setError(e instanceof Error ? e.message : "Postimi dështoi.");
+      void qc.invalidateQueries({ queryKey: ["feed"] });
+    },
   });
-
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -189,62 +188,7 @@ function FeedPage() {
     return sortPosts(matched, sortKey);
   }, [posts, filter, query, sortKey]);
 
-
   const suggestion = useMemo(() => suggestCategory(draft), [draft]);
-
-
-  function publish(price: number, justification?: string) {
-    const authorFullName = "Ju Demo";
-    const newPost: Post = {
-      id: crypto.randomUUID(),
-      authorFullName,
-      offerType: cat,
-      body: draft,
-      price,
-      createdAt: "tani",
-      createdAtMs: Date.now(),
-      rating: 0,
-      ratingCount: 0,
-      sales: 0,
-
-      comments: [],
-      attachments: attachments.map((a) => a.file.name),
-      justification,
-    };
-
-    // Dedupe: remove older near-duplicate posts from the same author.
-    const filtered = posts.filter((p) => {
-      if (p.authorFullName !== authorFullName) return true;
-      return jaccard(p.body, newPost.body) < DUPLICATE_THRESHOLD;
-    });
-    const removed = posts.length - filtered.length;
-
-    setPosts([newPost, ...filtered]);
-    setDraft("");
-    setPriceStr("");
-    setAttachments([]);
-    markPosted();
-    announce({
-      id: newPost.id,
-      authorFullName,
-      body: newPost.body,
-      offerType: newPost.offerType,
-      price: newPost.price,
-    });
-    setNotice(
-      [
-        "Postimi u publikua. Të gjithë anëtarët u njoftuan.",
-        removed > 0 ? `${removed} postim i mëparshëm i ngjashëm u fshi automatikisht.` : "",
-        newPost.attachments && newPost.attachments.length > 0
-          ? `${newPost.attachments.length} bashkëngjitje kaluan skanimin.`
-          : "",
-
-        justification ? "Justifikimi i çmimit u dërgua për shqyrtim." : "",
-      ]
-        .filter(Boolean)
-        .join(" "),
-    );
-  }
 
   function submit() {
     setError(null);
@@ -253,57 +197,59 @@ function FeedPage() {
       setError("Llogaria juaj është pezulluar. Nuk mund të postoni deri në përfundim.");
       return;
     }
-    if (!canPost) {
-      setError(`Limiti: 1 postim / 24 orë. Mund të postoni përsëri pas ${remainingLabel}.`);
-      return;
-    }
     if (!draft.trim()) return;
 
-    // 1) Contact detection (tekst)
     const hits = detectContact(draft);
     if (hits.length > 0) {
-      const list = hits.map((h) => h.label).join(", ");
-      const reason = `Postimi përmban informacion kontakti (${list}). Kontakti lejohet vetëm pas pagesës së taksës dhe interesit të blerësit.`;
-      const { count: c, suspendedUntil: su } = addViolation("contact", reason);
       setError(
-        `${reason}\nShkelje: ${c}/${max}${su ? " — llogaria u pezullua për 7 ditë." : ""}`,
+        `Postimi përmban informacion kontakti (${hits
+          .map((h) => h.label)
+          .join(", ")}). Hiqeni përpara publikimit — përndryshe regjistrohet shkelje.`,
       );
       return;
     }
-
-    // 2) Bashkëngjitjet duhet të kenë kaluar skanimin
     if (attachments.some((a) => a.verdict === "blocked")) {
       setError("Hiqni bashkëngjitjet e bllokuara përpara publikimit.");
       return;
     }
-
-    // 3) Price validation — jashtë normave hap justifikimin, jo shkelje direkt
     const price = Number(priceStr.replace(/\D/g, ""));
     const pc = checkPrice(price, cat);
     if (!pc.ok) {
       setJustifyFor({ price, reason: pc.reason! });
       return;
     }
-
-    publish(price);
+    publishMutation.mutate({ price });
   }
 
-  function ratePost(id: string, value: number) {
-    if (myRatings[id]) return;
-    setMyRatings((m) => ({ ...m, [id]: value }));
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              ratingCount: p.ratingCount + 1,
-              rating: (p.rating * p.ratingCount + value) / (p.ratingCount + 1),
-            }
-          : p,
-      ),
+  if (authLoading) {
+    return (
+      <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
     );
   }
 
+  if (!session) {
+    return (
+      <div className="grid min-h-screen place-items-center px-6">
+        <div className="card-elevated max-w-md p-8 text-center">
+          <ShieldCheck className="mx-auto h-8 w-8 text-primary" />
+          <h1 className="mt-4 text-lg font-semibold">Feed vetëm për anëtarë të verifikuar</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Hyni ose regjistrohuni me 2FA për të shikuar dhe publikuar postime.
+          </p>
+          <Link
+            to="/auth"
+            className="mt-5 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Hyr / Regjistrohu
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const busy = publishMutation.isPending || uploading;
 
   return (
     <div className="min-h-screen">
@@ -340,9 +286,10 @@ function FeedPage() {
         </div>
       </header>
 
-
       <main className="mx-auto max-w-7xl px-6 py-8">
-        {isSuspended && suspendedUntil && <SuspensionBanner until={suspendedUntil} onReset={reset} />}
+        {isSuspended && me?.suspendedUntil && (
+          <SuspensionBanner until={me.suspendedUntil} onReset={() => void qc.invalidateQueries()} />
+        )}
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
           {/* Left: Categories */}
@@ -356,7 +303,9 @@ function FeedPage() {
                   <button
                     onClick={() => setFilter("all")}
                     className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${
-                      filter === "all" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-input hover:text-foreground"
+                      filter === "all"
+                        ? "bg-primary/15 text-primary"
+                        : "text-muted-foreground hover:bg-input hover:text-foreground"
                     }`}
                   >
                     <span>Të gjitha</span>
@@ -387,7 +336,8 @@ function FeedPage() {
               <div className="mt-4 rounded-md bg-input/50 p-3 text-xs text-muted-foreground">
                 <p>AI kategorizon dhe skanon postimet për kontakt, malware dhe çmim jashtë normave.</p>
                 <p className="mt-2">
-                  <span className="font-semibold text-foreground">Shkelje:</span> {count}/{max}
+                  <span className="font-semibold text-foreground">Shkelje:</span>{" "}
+                  {me?.violations ?? 0}/3
                 </p>
               </div>
             </div>
@@ -399,22 +349,13 @@ function FeedPage() {
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <ShieldCheck className="h-3.5 w-3.5 text-primary" />
                 Një postim / 24 orë — pa kontakt në tekst/foto. Kontakti hapet pas interesit + taksës.
-                {!canPost && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--color-warning)]/15 px-2.5 py-1 text-[color:var(--color-warning)]">
-                    <Clock className="h-3.5 w-3.5" /> Postimi i radhës pas {remainingLabel}
-                  </span>
-                )}
               </div>
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 rows={3}
-                disabled={isSuspended || !canPost}
-                placeholder={
-                  canPost
-                    ? "Çfarë ofron sot? (mos përfshi tel/email/adresë — do të bllokohet)"
-                    : `Limiti 1 postim / 24 orë — provoni pas ${remainingLabel}`
-                }
+                disabled={isSuspended || busy}
+                placeholder="Çfarë ofron sot? (mos përfshi tel/email/adresë — do të bllokohet)"
                 className="w-full resize-none rounded-md border border-border bg-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
               />
 
@@ -425,7 +366,7 @@ function FeedPage() {
                     inputMode="numeric"
                     value={priceStr}
                     onChange={(e) => setPriceStr(e.target.value.replace(/\D/g, ""))}
-                    disabled={isSuspended}
+                    disabled={isSuspended || busy}
                     placeholder="Çmimi (Lekë)"
                     className="w-full bg-transparent outline-none placeholder:text-muted-foreground/70"
                   />
@@ -467,18 +408,14 @@ function FeedPage() {
                   })}
                 </div>
                 <div className="flex items-center gap-2">
-                  <AttachmentPicker
-                    disabled={isSuspended || !canPost}
-                    onChange={setAttachments}
-                  />
-
+                  <AttachmentPicker disabled={isSuspended || busy} onChange={setAttachments} />
                   <button
                     onClick={submit}
-                    disabled={isSuspended || !canPost}
-
+                    disabled={isSuspended || busy}
                     className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <Send className="h-4 w-4" /> Posto
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    {uploading ? "Ngarkohet…" : "Posto"}
                   </button>
                 </div>
               </div>
@@ -507,14 +444,28 @@ function FeedPage() {
 
             <SortBar value={sortKey} onChange={setSortKey} resultCount={visible.length} />
 
+            {feedQuery.isPending && (
+              <div className="card-elevated mt-3 grid place-items-center p-8 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
+            )}
+            {feedQuery.isError && (
+              <div className="card-elevated mt-3 p-6 text-sm text-destructive">
+                Feed nuk u lexua: {(feedQuery.error as Error).message}
+              </div>
+            )}
+
             <div className="mt-3 space-y-4">
               {visible.map((p) => {
                 const M = CAT_META[p.offerType];
+                const myComments = p.comments.filter((c) => c.authorId === me?.id).length;
                 return (
                   <article key={p.id} className="card-elevated p-5">
                     <div className="flex items-center gap-3">
                       <UserBadge fullName={p.authorFullName} />
-                      <div className="flex-1 text-xs text-muted-foreground">{p.createdAt}</div>
+                      <div className="flex-1 text-xs text-muted-foreground">
+                        {relative(p.createdAtMs)}
+                      </div>
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${M.className}`}
                       >
@@ -522,8 +473,20 @@ function FeedPage() {
                       </span>
                     </div>
                     <p className="mt-3 text-sm leading-relaxed">{p.body}</p>
+                    {p.attachments.length > 0 && (
+                      <ul className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        {p.attachments.map((a) => (
+                          <li
+                            key={a}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-input/60 px-2 py-1"
+                          >
+                            <Paperclip className="h-3 w-3" /> {a}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
-                      <div className="flex items-center gap-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-3 text-xs">
                         <span className="inline-flex items-center gap-1.5 text-[color:var(--color-success)]">
                           <ShieldCheck className="h-3.5 w-3.5" /> Autori i verifikuar
                         </span>
@@ -540,47 +503,51 @@ function FeedPage() {
                         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                           <MessageSquare className="h-3.5 w-3.5" /> {p.comments.length}
                         </span>
-
                       </div>
-                      <button
-                        onClick={() => setInterestFor(p)}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/25"
-                      >
-                        <HandCoins className="h-3.5 w-3.5" /> Shpreh interes
-                      </button>
+                      {p.authorId !== me?.id && (
+                        <button
+                          onClick={() => setInterestFor(p)}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/25"
+                        >
+                          <HandCoins className="h-3.5 w-3.5" /> Shpreh interes
+                        </button>
+                      )}
                     </div>
                     <div className="mt-3 flex items-center gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
                       <span>Vlerëso:</span>
                       {[1, 2, 3, 4, 5].map((v) => (
                         <button
                           key={v}
-                          onClick={() => ratePost(p.id, v)}
-                          disabled={!!myRatings[p.id]}
+                          onClick={async () => {
+                            await doRate({ data: { postId: p.id, stars: v } });
+                            void qc.invalidateQueries({ queryKey: ["feed"] });
+                          }}
                           aria-label={`Vlerëso ${v} yje`}
-                          className="disabled:cursor-not-allowed"
                         >
                           <Star
                             className={`h-4 w-4 ${
-                              v <= (myRatings[p.id] ?? 0)
+                              v <= (p.myRating ?? 0)
                                 ? "fill-[color:var(--color-warning)] text-[color:var(--color-warning)]"
                                 : "text-muted-foreground hover:text-[color:var(--color-warning)]"
                             }`}
                           />
                         </button>
                       ))}
-                      {myRatings[p.id] && <span>Faleminderit — vlerësimi u regjistrua.</span>}
+                      {p.myRating && <span>Vlerësimi u regjistrua ({p.myRating}★).</span>}
                     </div>
                     <CommentSection
-                      initial={p.comments}
-                      onViolation={(reason) => {
-                        const { count, suspendedUntil } = addViolation("contact", reason);
-                        return { count, max, suspended: !!suspendedUntil };
+                      items={p.comments}
+                      myCount={myComments}
+                      disabled={isSuspended}
+                      onSubmit={async (body) => {
+                        await doComment({ data: { postId: p.id, body } });
+                        await qc.invalidateQueries({ queryKey: ["feed"] });
                       }}
                     />
                   </article>
                 );
               })}
-              {visible.length === 0 && (
+              {!feedQuery.isPending && visible.length === 0 && (
                 <div className="card-elevated p-8 text-center text-sm text-muted-foreground">
                   Asnjë postim në këtë kategori.
                 </div>
@@ -611,6 +578,9 @@ function FeedPage() {
                     </li>
                   );
                 })}
+                {posts.length === 0 && (
+                  <li className="text-xs text-muted-foreground">Asnjë postim ende.</li>
+                )}
               </ul>
             </div>
           </aside>
@@ -629,22 +599,16 @@ function FeedPage() {
         <PriceJustifyDialog
           reason={justifyFor.reason}
           onCancel={() => {
-            const { count: c, suspendedUntil: su } = addViolation("price", justifyFor.reason);
             setJustifyFor(null);
-            setError(
-              `Çmimi jashtë normave pa justifikim. Shkelje: ${c}/${max}${
-                su ? " — llogaria u pezullua për 7 ditë." : ""
-              }`,
-            );
+            setError("Çmimi jashtë normave pa justifikim — postimi nuk u publikua.");
           }}
           onSubmit={(justification) => {
             const price = justifyFor.price;
             setJustifyFor(null);
-            publish(price, justification);
+            publishMutation.mutate({ price, justification });
           }}
         />
       )}
-
     </div>
   );
 }
