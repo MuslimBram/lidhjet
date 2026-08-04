@@ -73,3 +73,9 @@ Kur kërkohet një produkt/shërbim, rezultatet renditen sipas kritereve reale (
 4. Çmim "brenda normave" nga mesatarja reale e postimeve të miratuara + kategorizim AI në server.
 5. Verifikim numri/emaili me TrueCaller / CallApp / rrjete sociale dhe rrjedha e 24 orëve me njoftim AI.
 6. Email pezullimi/riaktivizimi dhe pagesa reale e taksës së shërbimit.
+
+## Faza 4a — 2FA real (përfunduar)
+- Kodi 2FA gjenerohet dhe verifikohet nga backend-i (Lovable Cloud), dërgohet me email (SMS pas konfigurimit).
+- Shifra të rastësishme nuk pranohen më; sesioni krijohet vetëm pas verifikimit.
+- Profili (Emër/Mbiemër, çfarë ofron) ruhet në tabelën `profiles` me RLS.
+- `useAuth` lexon sesionin, profilin dhe rolin (owner/admin/user) nga baza.
