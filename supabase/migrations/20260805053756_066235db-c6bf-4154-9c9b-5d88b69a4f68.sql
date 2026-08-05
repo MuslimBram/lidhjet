@@ -1,0 +1,11 @@
+REVOKE EXECUTE ON FUNCTION public.notify_new_interest() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.notify_chat_open() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.expire_stale_records() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.apply_suspension() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.enforce_comment_rules() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.enforce_post_rules() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.touch_updated_at() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.list_public_profiles() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.has_role(uuid, app_role) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.is_staff(uuid) FROM anon;

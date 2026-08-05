@@ -93,6 +93,124 @@ export type Database = {
           },
         ]
       }
+      interest_messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          interest_id: string
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          interest_id: string
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          interest_id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interest_messages_interest_id_fkey"
+            columns: ["interest_id"]
+            isOneToOne: false
+            referencedRelation: "interests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      interests: {
+        Row: {
+          buyer_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          note: string | null
+          offer_price: number | null
+          post_id: string
+          seller_id: string
+          status: string
+          tax_amount: number
+          tax_paid: boolean
+          tax_paid_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          buyer_id: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          note?: string | null
+          offer_price?: number | null
+          post_id: string
+          seller_id: string
+          status?: string
+          tax_amount?: number
+          tax_paid?: boolean
+          tax_paid_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          buyer_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          note?: string | null
+          offer_price?: number | null
+          post_id?: string
+          seller_id?: string
+          status?: string
+          tax_amount?: number
+          tax_paid?: boolean
+          tax_paid_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interests_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          kind: string
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       posts: {
         Row: {
           author_id: string
@@ -274,6 +392,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      expire_stale_records: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
