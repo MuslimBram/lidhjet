@@ -154,3 +154,72 @@ export const getMyRoleInfo = createServerFn({ method: "GET" })
     const { data } = await context.supabase.rpc("is_staff", { _user_id: context.userId });
     return { isStaff: data === true };
   });
+
+export interface StaffProfileRow {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  offerType: string;
+  verificationStatus: string;
+  aiRisk: number;
+  aiNotes: string[];
+  createdAt: string;
+  reviewEndsAt: string;
+  approvedAt: string | null;
+  suspendedUntil: string | null;
+  violations: { kind: string; reason: string; createdAt: string }[];
+}
+
+/** Full registry of profiles + their violations. Owner/Admin only. */
+export const listAllProfiles = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<StaffProfileRow[]> => {
+    await assertStaff(context);
+    const [{ data: profiles, error }, { data: violations }] = await Promise.all([
+      context.supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+      context.supabase.from("violations").select("*").order("created_at", { ascending: false }),
+    ]);
+    if (error) throw new Error(error.message);
+    return (profiles ?? []).map((p) => ({
+      id: p.id,
+      fullName: p.full_name,
+      email: p.email,
+      phone: p.phone,
+      offerType: p.offer_type,
+      verificationStatus: p.verification_status,
+      aiRisk: p.ai_risk_score,
+      aiNotes: (p.ai_notes ?? "").split("\n").filter(Boolean),
+      createdAt: p.created_at,
+      reviewEndsAt: p.review_ends_at,
+      approvedAt: p.approved_at,
+      suspendedUntil: p.suspended_until,
+      violations: (violations ?? [])
+        .filter((v: { user_id: string }) => v.user_id === p.id)
+        .map((v: { kind: string; reason: string; created_at: string }) => ({
+          kind: v.kind,
+          reason: v.reason,
+          createdAt: v.created_at,
+        })),
+    }));
+  });
+
+/** Status of the signed-in user's own 24h review window. */
+export const getMyReviewStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("profiles")
+      .select("verification_status, review_ends_at, ai_risk_score, ai_notes, approved_at")
+      .eq("id", context.userId)
+      .maybeSingle();
+    if (error || !data) throw new Error("Profili nuk u gjet.");
+    return {
+      status: data.verification_status,
+      reviewEndsAt: data.review_ends_at,
+      risk: data.ai_risk_score,
+      notes: (data.ai_notes ?? "").split("\n").filter(Boolean),
+      approvedAt: data.approved_at,
+      expired: new Date(data.review_ends_at).getTime() <= Date.now(),
+    };
+  });
