@@ -221,15 +221,10 @@ export const sendInterestMessage = createServerFn({ method: "POST" })
       .insert({ interest_id: row.id, sender_id: userId, body });
     if (error) throw new Error(error.message);
 
-    const other = row.buyer_id === userId ? row.seller_id : row.buyer_id;
-    await supabase.from("notifications").insert({
-      user_id: other,
-      kind: "message",
-      title: "Mesazh i re në bisedë",
-      body: body.slice(0, 120),
-    });
+    // The counterpart's notification is created by the database trigger.
     return { ok: true };
   });
+
 
 export const listNotifications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
