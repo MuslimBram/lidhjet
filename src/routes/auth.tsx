@@ -437,6 +437,56 @@ function AuthPage() {
                 ? "2FA u verifikua nga serveri. Mund të kaloni në feed."
                 : "AI po analizon emrin, email-in dhe të dhënat. Pas 24 orësh do të kërkohet 2FA përfundimtar përpara aktivizimit."}
             </p>
+
+            {mode === "register" && (aiChecking || ai || aiError) && (
+              <div className="mt-4 rounded-md border border-border bg-input/50 p-3 text-left text-xs">
+                <p className="flex items-center gap-2 font-medium text-foreground">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Kontrolli AI
+                </p>
+                {aiChecking && (
+                  <p className="mt-1 inline-flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Po analizohen email-i, numri dhe emri…
+                  </p>
+                )}
+                {aiError && <p className="mt-1 text-destructive">{aiError}</p>}
+                {ai && (
+                  <>
+                    <p
+                      className={`mt-1 font-medium ${
+                        ai.risk >= 70
+                          ? "text-destructive"
+                          : ai.risk >= 40
+                            ? "text-[color:var(--color-warning)]"
+                            : "text-[color:var(--color-success)]"
+                      }`}
+                    >
+                      Rrezik {ai.risk}/100 —{" "}
+                      {ai.risk >= 70
+                        ? "kalon në rishikim manual nga Admin"
+                        : "në rrjedhën normale 24-orëshe"}
+                    </p>
+                    {ai.notes.length > 0 && (
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
+                        {ai.notes.map((n, i) => (
+                          <li key={i}>{n}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {ai.questions.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-foreground">Pyetje sqaruese:</p>
+                        <ul className="mt-1 list-disc space-y-1 pl-4 text-muted-foreground">
+                          {ai.questions.map((q, i) => (
+                            <li key={i}>{q}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="mt-4 rounded-md border border-border bg-input/50 p-3 text-left text-xs text-muted-foreground">
               <p className="flex items-center gap-2 font-medium text-foreground">
                 <BellRing className="h-3.5 w-3.5" /> Njoftimet
