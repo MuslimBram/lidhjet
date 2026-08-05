@@ -168,8 +168,24 @@ function AuthPage() {
       setError("Profili nuk u ruajt: " + err.message);
       return;
     }
-    notifyUser("Lidhjet", "Profili u dërgua për verifikim 24-orësh.");
     setStep("done");
+    setAiChecking(true);
+    try {
+      const verdict = await assessMyProfile();
+      setAi(verdict);
+      if (verdict.risk >= 70) {
+        notifyUser(
+          "Lidhjet — rishikim manual",
+          "Kontrolli AI ngriti dyshime. Llogaria pret miratim nga Admin.",
+        );
+      } else {
+        notifyUser("Lidhjet", "Profili u dërgua për verifikim 24-orësh.");
+      }
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "Kontrolli AI dështoi.");
+    } finally {
+      setAiChecking(false);
+    }
   }
 
   async function saveClarified() {
