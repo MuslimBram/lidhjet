@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Mail, Smartphone, ShieldCheck, ArrowLeft, Loader2, BellRing } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureNotificationPermission, notifyUser } from "@/lib/notify";
+import { assessMyProfile } from "@/lib/moderation.functions";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
