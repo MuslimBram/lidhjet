@@ -41,6 +41,7 @@ import { sortPosts, type SortKey } from "@/lib/sortPosts";
 import { SortBar } from "@/components/SortBar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { scanImageAi } from "@/lib/scan.functions";
 import { getFeed, createPost, addComment, ratePost, type Category, type FeedPost } from "@/lib/feed.functions";
 
 export const Route = createFileRoute("/feed")({
@@ -108,6 +109,7 @@ function FeedPage() {
   const [justifyFor, setJustifyFor] = useState<{ price: number; reason: string } | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  const aiScan = useServerFn(scanImageAi);
   const posts = feedQuery.data?.posts ?? [];
   const me = feedQuery.data?.me;
   const isSuspended = !!me?.suspendedUntil && new Date(me.suspendedUntil).getTime() > Date.now();
@@ -125,6 +127,20 @@ function FeedPage() {
           notes?: string;
         }[] = [];
         for (const a of attachments) {
+          if (a.kind === "image") {
+            const dataUrl = await new Promise<string>((res, rej) => {
+              const fr = new FileReader();
+              fr.onload = () => res(String(fr.result));
+              fr.onerror = () => rej(new Error("Lexim i skedarit dështoi."));
+              fr.readAsDataURL(a.file);
+            });
+            const ai = await aiScan({ data: { dataUrl, fileName: a.file.name } });
+            if (ai.verdict === "blocked") {
+              throw new Error(
+                `Imazhi "${a.file.name}" u bllokua nga AI: ${ai.reasons.join("; ") || "përmban kontakt ose përmbajtje të papërshtatshme."}`,
+              );
+            }
+          }
           const path = `${session!.user.id}/${crypto.randomUUID()}-${a.file.name}`;
           const up = await supabase.storage.from("attachments").upload(path, a.file);
           if (up.error) throw new Error(`Ngarkimi i "${a.file.name}" dështoi: ${up.error.message}`);
@@ -279,6 +295,9 @@ function FeedPage() {
           </div>
           <div className="order-2 flex items-center gap-2 md:order-3">
             <NotificationSettings />
+            <Link to="/interests" className="text-xs text-muted-foreground hover:text-foreground">
+              Interesat
+            </Link>
             <Link to="/admin" className="text-xs text-muted-foreground hover:text-foreground">
               Admin
             </Link>
