@@ -51,6 +51,9 @@ function AuthPage() {
   const [sentAt, setSentAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [notifState, setNotifState] = useState<string>("");
+  const [aiChecking, setAiChecking] = useState(false);
+  const [ai, setAi] = useState<{ risk: number; notes: string[]; questions: string[] } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
