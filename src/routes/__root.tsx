@@ -77,12 +77,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lidhjet — Platformë e sigurt" },
+      { title: "Lidhjet — Platformë e sigurt me AI & 2FA" },
       {
         name: "description",
         content:
-          "Platformë e sigurt me verifikim AI dhe autentifikim dy-faktorësh.",
+          "Rrjet i besueshëm për pune, shërbime dhe tregti — me verifikim AI, 2FA dhe kontroll 24-orësh të llogarive.",
       },
+      { property: "og:title", content: "Lidhjet — Platformë e sigurt me AI & 2FA" },
+      { name: "twitter:title", content: "Lidhjet — Platformë e sigurt me AI & 2FA" },
+      { property: "og:description", content: "Rrjet i besueshëm për pune, shërbime dhe tregti — me verifikim AI, 2FA dhe kontroll 24-orësh të llogarive." },
+      { name: "twitter:description", content: "Rrjet i besueshëm për pune, shërbime dhe tregti — me verifikim AI, 2FA dhe kontroll 24-orësh të llogarive." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/8518ac56-f2a9-40db-a60e-671c1f0846bd/id-preview-2d1abdb5--1a0c60ac-278d-4f7d-b022-5ca7f5f319b1.lovable.app-1785908590062.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/8518ac56-f2a9-40db-a60e-671c1f0846bd/id-preview-2d1abdb5--1a0c60ac-278d-4f7d-b022-5ca7f5f319b1.lovable.app-1785908590062.png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:type", content: "website" },
     ],
     links: [
       {
@@ -102,7 +110,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
   }),
   shellComponent: RootShell,

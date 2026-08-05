@@ -22,11 +22,11 @@ export const Route = createFileRoute("/")({
         content:
           "Rrjet i besueshëm për pune, shërbime dhe tregti — me verifikim AI, 2FA dhe kontroll 24-orësh të llogarive.",
       },
-      { property: "og:title", content: "Lidhjet — Platformë e sigurt" },
+      { property: "og:title", content: "Lidhjet — Platformë e sigurt me AI & 2FA" },
       {
         property: "og:description",
         content:
-          "Rrjet i besueshëm me mbrojtje AI, 2FA dhe verifikim 24 orësh.",
+          "Rrjet i besueshëm për pune, shërbime dhe tregti — me verifikim AI, 2FA dhe kontroll 24-orësh të llogarive.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
