@@ -217,7 +217,7 @@ function InterestsPage() {
                         <button
                           disabled={!drafts[it.id]?.trim() || msgMut.isPending}
                           onClick={() =>
-                            msgMut.mutate({ id: it.id, body: drafts[it.id］?.trim() ?? "" })
+                            msgMut.mutate({ id: it.id, body: (drafts[it.id] ?? "").trim() })
                           }
                           className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                         >
