@@ -589,7 +589,9 @@ function FeedPage() {
 
       {interestFor && (
         <InterestDialog
+          postId={interestFor.id}
           authorName={interestFor.authorFullName}
+
           price={interestFor.price}
           onClose={() => setInterestFor(null)}
         />
