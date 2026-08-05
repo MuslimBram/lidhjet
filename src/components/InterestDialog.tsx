@@ -1,14 +1,20 @@
 import { useState } from "react";
-import { X, HandCoins, MessageCircle, Send, Loader2 } from "lucide-react";
+import { X, HandCoins, Send, Loader2 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { useMutation } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { formatLek } from "@/lib/taxCalc";
+import { createInterest } from "@/lib/interests.functions";
 
-type Stage = "interest" | "discount" | "sent" | "chat";
+type Stage = "interest" | "discount" | "sent";
 
 export function InterestDialog({
+  postId,
   authorName,
   price,
   onClose,
 }: {
+  postId: string;
   authorName: string;
   price: number;
   onClose: () => void;
@@ -16,30 +22,23 @@ export function InterestDialog({
   const [stage, setStage] = useState<Stage>("interest");
   const [offer, setOffer] = useState("");
   const [note, setNote] = useState("");
-  const [sending, setSending] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [thread, setThread] = useState<{ me: boolean; text: string }[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const send = useServerFn(createInterest);
+  const mutation = useMutation({
+    mutationFn: (vars: { offerPrice?: number | null; note?: string }) =>
+      send({ data: { postId, ...vars } }),
+    onSuccess: () => {
+      setError(null);
+      setStage("sent");
+    },
+    onError: (e: unknown) =>
+      setError(e instanceof Error ? e.message : "Interesi nuk u dërgua."),
+  });
 
   const offerNum = Number(offer.replace(/[^\d]/g, ""));
   const offerValid = Number.isFinite(offerNum) && offerNum > 0 && offerNum < price;
-
-  function send(withDiscount: boolean) {
-    setSending(true);
-    setTimeout(() => {
-      setSending(false);
-      setStage("sent");
-      setThread(
-        withDiscount
-          ? [
-              {
-                me: true,
-                text: `Kërkesë për ulje: ${formatLek(offerNum)}${note.trim() ? ` — ${note.trim()}` : ""}`,
-              },
-            ]
-          : [{ me: true, text: "Kam shprehur interes për këtë ofertë." }],
-      );
-    }, 500);
-  }
+  const busy = mutation.isPending;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onClick={onClose}>
@@ -59,11 +58,15 @@ export function InterestDialog({
           <span className="font-semibold">{formatLek(price)}</span>
         </div>
 
+        {error && (
+          <p className="mt-3 rounded-md bg-destructive/10 p-3 text-xs text-destructive">{error}</p>
+        )}
+
         {stage === "interest" && (
           <>
             <p className="mt-4 text-xs text-muted-foreground">
-              Interesi juaj i dërgohet shitësit. Mund të kërkoni edhe ulje të çmimit — shitësi
-              diskuton çmimin drejtpërdrejt me ju.
+              Interesi i dërgohet shitësit. Biseda hapet vetëm pasi shitësi konfirmon shërbimin;
+              dritarja zgjat 24 orë. Mund të kërkoni edhe ulje çmimi.
             </p>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
@@ -79,11 +82,11 @@ export function InterestDialog({
                 <HandCoins className="h-4 w-4" /> Kërko ulje
               </button>
               <button
-                onClick={() => send(false)}
-                disabled={sending}
+                onClick={() => mutation.mutate({ offerPrice: null })}
+                disabled={busy}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
               >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Dërgo interesin
               </button>
             </div>
@@ -120,11 +123,11 @@ export function InterestDialog({
                 Kthehu
               </button>
               <button
-                disabled={!offerValid || sending}
-                onClick={() => send(true)}
+                disabled={!offerValid || busy}
+                onClick={() => mutation.mutate({ offerPrice: offerNum, note })}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <HandCoins className="h-4 w-4" />}
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <HandCoins className="h-4 w-4" />}
                 Dërgo kërkesën për ulje
               </button>
             </div>
@@ -134,7 +137,8 @@ export function InterestDialog({
         {stage === "sent" && (
           <>
             <div className="mt-4 rounded-md bg-[color:var(--color-success)]/10 p-3 text-xs text-[color:var(--color-success)]">
-              Kërkesa u dërgua. Shitësi njoftohet dhe hap bisedën për të diskutuar çmimin.
+              Kërkesa u regjistrua dhe shitësi u njoftua. Biseda shfaqet në “Interesat e mia” sapo
+              shitësi e hap.
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -143,62 +147,12 @@ export function InterestDialog({
               >
                 Mbyll
               </button>
-              <button
-                onClick={() => setStage("chat")}
+              <Link
+                to="/interests"
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
-                <MessageCircle className="h-4 w-4" /> Hap bisedën
-              </button>
-            </div>
-          </>
-        )}
-
-        {stage === "chat" && (
-          <>
-            <div className="mt-4 rounded-lg border border-border bg-input/50 p-3">
-              <div className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                <MessageCircle className="h-3.5 w-3.5" /> Bisedë me {authorName}
-              </div>
-              <div className="max-h-40 space-y-2 overflow-y-auto">
-                {thread.map((m, i) => (
-                  <div
-                    key={i}
-                    className={`rounded px-3 py-2 text-xs ${
-                      m.me
-                        ? "bg-primary/15 text-foreground"
-                        : "bg-background text-muted-foreground"
-                    }`}
-                  >
-                    {m.text}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="mt-3 flex gap-2">
-              <input
-                value={msg}
-                onChange={(e) => setMsg(e.target.value)}
-                placeholder="Shkruaj mesazh për çmimin…"
-                className="flex-1 rounded-md border border-border bg-input px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
-              />
-              <button
-                disabled={!msg.trim()}
-                onClick={() => {
-                  setThread((t) => [...t, { me: true, text: msg.trim() }]);
-                  setMsg("");
-                }}
-                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={onClose}
-                className="rounded-md border border-border bg-input px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
-              >
-                Mbyll
-              </button>
+                Interesat e mia
+              </Link>
             </div>
           </>
         )}
