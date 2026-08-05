@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Mail, Smartphone, ShieldCheck, ArrowLeft, Loader2, BellRing } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureNotificationPermission, notifyUser } from "@/lib/notify";
+import { assessMyProfile } from "@/lib/moderation.functions";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -51,6 +52,9 @@ function AuthPage() {
   const [sentAt, setSentAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [notifState, setNotifState] = useState<string>("");
+  const [aiChecking, setAiChecking] = useState(false);
+  const [ai, setAi] = useState<{ risk: number; notes: string[]; questions: string[] } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -168,8 +172,24 @@ function AuthPage() {
       setError("Profili nuk u ruajt: " + err.message);
       return;
     }
-    notifyUser("Lidhjet", "Profili u dërgua për verifikim 24-orësh.");
     setStep("done");
+    setAiChecking(true);
+    try {
+      const verdict = await assessMyProfile();
+      setAi(verdict);
+      if (verdict.risk >= 70) {
+        notifyUser(
+          "Lidhjet — rishikim manual",
+          "Kontrolli AI ngriti dyshime. Llogaria pret miratim nga Admin.",
+        );
+      } else {
+        notifyUser("Lidhjet", "Profili u dërgua për verifikim 24-orësh.");
+      }
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "Kontrolli AI dështoi.");
+    } finally {
+      setAiChecking(false);
+    }
   }
 
   async function saveClarified() {
@@ -417,6 +437,56 @@ function AuthPage() {
                 ? "2FA u verifikua nga serveri. Mund të kaloni në feed."
                 : "AI po analizon emrin, email-in dhe të dhënat. Pas 24 orësh do të kërkohet 2FA përfundimtar përpara aktivizimit."}
             </p>
+
+            {mode === "register" && (aiChecking || ai || aiError) && (
+              <div className="mt-4 rounded-md border border-border bg-input/50 p-3 text-left text-xs">
+                <p className="flex items-center gap-2 font-medium text-foreground">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Kontrolli AI
+                </p>
+                {aiChecking && (
+                  <p className="mt-1 inline-flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Po analizohen email-i, numri dhe emri…
+                  </p>
+                )}
+                {aiError && <p className="mt-1 text-destructive">{aiError}</p>}
+                {ai && (
+                  <>
+                    <p
+                      className={`mt-1 font-medium ${
+                        ai.risk >= 70
+                          ? "text-destructive"
+                          : ai.risk >= 40
+                            ? "text-[color:var(--color-warning)]"
+                            : "text-[color:var(--color-success)]"
+                      }`}
+                    >
+                      Rrezik {ai.risk}/100 —{" "}
+                      {ai.risk >= 70
+                        ? "kalon në rishikim manual nga Admin"
+                        : "në rrjedhën normale 24-orëshe"}
+                    </p>
+                    {ai.notes.length > 0 && (
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
+                        {ai.notes.map((n, i) => (
+                          <li key={i}>{n}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {ai.questions.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-foreground">Pyetje sqaruese:</p>
+                        <ul className="mt-1 list-disc space-y-1 pl-4 text-muted-foreground">
+                          {ai.questions.map((q, i) => (
+                            <li key={i}>{q}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="mt-4 rounded-md border border-border bg-input/50 p-3 text-left text-xs text-muted-foreground">
               <p className="flex items-center gap-2 font-medium text-foreground">
                 <BellRing className="h-3.5 w-3.5" /> Njoftimet
