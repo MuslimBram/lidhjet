@@ -72,9 +72,13 @@ function AuthPage() {
   async function sendCode() {
     const id = identifier.trim();
     const shouldCreateUser = mode === "register";
+    const emailRedirectTo = `${window.location.origin}/auth/callback`;
     const { error: err } =
       method === "email"
-        ? await supabase.auth.signInWithOtp({ email: id, options: { shouldCreateUser } })
+        ? await supabase.auth.signInWithOtp({
+            email: id,
+            options: { shouldCreateUser, emailRedirectTo },
+          })
         : await supabase.auth.signInWithOtp({ phone: id, options: { shouldCreateUser } });
     if (err) {
       setError(translateAuthError(err.message, mode, method));
